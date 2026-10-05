@@ -1,0 +1,5 @@
+/dist/
+/agentbox
+*.test
+.DS_Store
+/.superpowers/
