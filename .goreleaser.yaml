@@ -1,0 +1,21 @@
+version: 2
+builds:
+  - main: ./cmd/agentbox
+    env: [CGO_ENABLED=0]
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    ldflags: ["-s -w -X github.com/agentbox-dev/agentbox/internal/cli.Version={{.Version}}"]
+archives:
+  - formats: [tar.gz]
+checksum:
+  name_template: checksums.txt
+homebrew_casks:
+  - repository: { owner: agentbox-dev, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
+    homepage: https://github.com/agentbox-dev/agentbox
+    description: Isolated dev environments for parallel AI coding agents
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/agentbox"]
+          end
