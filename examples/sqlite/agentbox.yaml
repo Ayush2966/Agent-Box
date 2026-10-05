@@ -1,0 +1,10 @@
+version: 1
+setup: npm install
+dev: node server.js
+ports: [APP_PORT]
+db:
+  driver: sqlite
+  url_env: DATABASE_PATH
+  source: dev.db
+env:
+  template: .env.example

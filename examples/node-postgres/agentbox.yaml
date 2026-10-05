@@ -1,0 +1,10 @@
+version: 1
+setup: npm install
+dev: node server.js
+ports: [APP_PORT]
+db:
+  driver: postgres
+  url_env: DATABASE_URL
+  source: postgres://postgres:postgres@localhost:5432/myapp
+env:
+  template: .env.example

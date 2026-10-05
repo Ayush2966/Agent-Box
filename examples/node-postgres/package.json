@@ -1,0 +1,1 @@
+{ "name": "agentbox-example-postgres", "private": true, "version": "0.0.0", "scripts": { "dev": "node server.js" } }
