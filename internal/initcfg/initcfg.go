@@ -41,6 +41,18 @@ func nodePM(root string) string {
 	return "npm"
 }
 
+// driverOf names the agentbox driver a connection string belongs to. It looks
+// only at the scheme or the file suffix, never at anything secret.
+func driverOf(v string) string {
+	switch {
+	case strings.HasPrefix(v, "postgres://"), strings.HasPrefix(v, "postgresql://"):
+		return "postgres"
+	case strings.HasPrefix(v, "file:"), strings.HasSuffix(v, ".db"), strings.HasSuffix(v, ".sqlite"), strings.HasSuffix(v, ".sqlite3"):
+		return "sqlite"
+	}
+	return ""
+}
+
 func Detect(root string) (Result, error) {
 	var r Result
 	setup, dev := "", ""
@@ -78,6 +90,10 @@ func Detect(root string) (Result, error) {
 		}
 		vars = envfile.Parse(data)
 	}
+	// The developer's real .env is read ONLY to recognise which database they
+	// use. agentbox.yaml is committed (spec §5) and spec §13 has init read
+	// .env.example, so no value out of a gitignored .env may ever reach the
+	// generated file -- that would push a live credential to the repo.
 	real := map[string]string{}
 	if data, err := os.ReadFile(filepath.Join(root, ".env")); err == nil {
 		for _, kv := range envfile.Parse(data) {
@@ -93,18 +109,17 @@ func Detect(root string) (Result, error) {
 		}
 		if urlEnv == "" && dbKey.MatchString(kv.Key) {
 			urlEnv, source = kv.Key, kv.Value
-			if v := real[kv.Key]; v != "" {
-				source = v
-			}
 		}
 	}
-	driver := ""
-	switch {
-	case strings.HasPrefix(source, "postgres://"), strings.HasPrefix(source, "postgresql://"):
-		driver = "postgres"
-	case strings.HasPrefix(source, "file:"), strings.HasSuffix(source, ".db"), strings.HasSuffix(source, ".sqlite"), strings.HasSuffix(source, ".sqlite3"):
-		driver = "sqlite"
-	case urlEnv != "":
+	// source comes from the template; the real value only breaks a tie on the
+	// driver, and is then deliberately left out of the generated YAML.
+	driver := driverOf(source)
+	if driver == "" && urlEnv != "" {
+		if driver = driverOf(real[urlEnv]); driver != "" {
+			source = ""
+		}
+	}
+	if driver == "" && urlEnv != "" {
 		r.Warnings = append(r.Warnings, fmt.Sprintf("found %s but couldn't tell which database it points to; add a db section by hand", urlEnv))
 	}
 
@@ -126,8 +141,15 @@ func Detect(root string) (Result, error) {
 	} else {
 		b.WriteString("ports: []  # env var names that get a free port per box, e.g. [PORT]\n")
 	}
-	if driver != "" {
+	switch {
+	case driver != "" && source != "":
 		fmt.Fprintf(&b, "db:\n  driver: %s\n  url_env: %s\n  source: %s\n", driver, urlEnv, strconv.Quote(source))
+	case driver != "":
+		// Only the gitignored .env told us the connection string, and this
+		// file is committed, so it is left for the user to fill in.
+		fmt.Fprintf(&b, "# db:\n#   driver: %s\n#   url_env: %s\n#   source: <%s connection string for your dev database>\n", driver, urlEnv, driver)
+		r.Warnings = append(r.Warnings, fmt.Sprintf(
+			"only your .env had a value for %s, and agentbox.yaml is committed; fill in db.source yourself and keep real credentials out of it", urlEnv))
 	}
 	if tmpl != "" {
 		fmt.Fprintf(&b, "env:\n  template: %s\n", tmpl)

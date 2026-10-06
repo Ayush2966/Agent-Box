@@ -47,12 +47,15 @@ func TestDetectNodePostgres(t *testing.T) {
 	}
 }
 
-func TestDetectPrefersRealEnvValue(t *testing.T) {
+// This used to assert the opposite -- that init prefers the real .env value
+// for db.source. That copied a live credential into a committed file, which
+// spec §5 and §13 forbid. The template's placeholder is what ships.
+func TestDetectTakesSourceFromTemplateNotRealEnv(t *testing.T) {
 	_, cfg := detect(t, map[string]string{
 		".env.example": "DATABASE_URL=postgres://user:pass@localhost/changeme\n",
 		".env":         "DATABASE_URL=postgres://me@localhost:5432/realdb\n",
 	})
-	if cfg.DB == nil || cfg.DB.Source != "postgres://me@localhost:5432/realdb" {
+	if cfg.DB == nil || cfg.DB.Source != "postgres://user:pass@localhost/changeme" {
 		t.Errorf("db = %+v", cfg.DB)
 	}
 }
@@ -72,5 +75,46 @@ func TestDetectGoAndEmpty(t *testing.T) {
 	_, cfg = detect(t, nil)
 	if cfg.Setup != "" || cfg.DB != nil {
 		t.Errorf("empty: %+v", cfg)
+	}
+}
+
+// agentbox.yaml is committed (spec §5), and spec §13 has init read
+// .env.example — not the developer's real, gitignored .env. Detecting the
+// driver from .env is fine; copying a value out of it into the generated
+// YAML would push a live credential to the repo.
+func TestDetectNeverCopiesSecretsFromRealEnv(t *testing.T) {
+	const secret = "sup3rs3cret"
+	res, cfg := detect(t, map[string]string{
+		"package.json": `{"scripts": {"dev": "next dev"}}`,
+		".env.example": "APP_PORT=3000\nDATABASE_URL=postgres://user:pass@localhost:5432/myapp\n",
+		".env":         "APP_PORT=3000\nDATABASE_URL=postgres://app:" + secret + "@prod.internal:5432/myapp\n",
+	})
+	for _, leak := range []string{secret, "prod.internal", "app:" + secret} {
+		if strings.Contains(res.YAML, leak) {
+			t.Fatalf("agentbox init copied %q out of .env into the committed agentbox.yaml:\n%s", leak, res.YAML)
+		}
+	}
+	// Detection itself must still work: the driver is knowable from the
+	// scheme alone, which carries no secret.
+	if cfg.DB == nil || cfg.DB.Driver != "postgres" || cfg.DB.URLEnv != "DATABASE_URL" {
+		t.Fatalf("driver detection regressed: %+v", cfg.DB)
+	}
+}
+
+// A real .env that reveals a different driver than .env.example must still
+// drive detection -- just without its value reaching the file.
+func TestDetectUsesRealEnvForDriverOnly(t *testing.T) {
+	res, cfg := detect(t, map[string]string{
+		".env.example": "DATABASE_URL=\n",
+		".env":         "DATABASE_URL=postgres://app:pw@db.internal:5432/myapp\n",
+	})
+	if strings.Contains(res.YAML, "pw@db.internal") {
+		t.Fatalf("leaked .env value:\n%s", res.YAML)
+	}
+	if cfg.DB != nil && cfg.DB.Source != "" && strings.Contains(cfg.DB.Source, "db.internal") {
+		t.Fatalf("db.source came from .env: %q", cfg.DB.Source)
+	}
+	if len(res.Warnings) == 0 {
+		t.Fatal("expected a warning telling the user to fill in db.source by hand")
 	}
 }
