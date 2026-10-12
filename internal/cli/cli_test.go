@@ -171,3 +171,15 @@ func TestPrintBoxShowsURL(t *testing.T) {
 		t.Fatalf("url line without a URL:\n%s", b.String())
 	}
 }
+
+func TestTUIRefusesWithoutATerminal(t *testing.T) {
+	t.Setenv("AGENTBOX_HOME", shortTempHome(t))
+	code, _, stderr := run("tui")
+	if code != 1 || !strings.Contains(stderr, "interactive terminal") {
+		t.Fatalf("exit %d, stderr %q", code, stderr)
+	}
+	code, out, _ := run("tui", "--help")
+	if code != 0 || !strings.Contains(out, "--all") {
+		t.Fatalf("help: exit %d\n%s", code, out)
+	}
+}

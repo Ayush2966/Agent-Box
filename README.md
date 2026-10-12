@@ -30,6 +30,7 @@ macOS and Linux. Needs `git` ≥ 2.38, plus `pg_dump`/`pg_restore` if you use Po
     agentbox init          # writes a starter agentbox.yaml. Review it.
     agentbox new feature-x # prints the box dir: point your agent there
     agentbox ui            # web dashboard; the box also answers at http://feature-x.localhost:7777/
+    agentbox tui           # the same dashboard in your terminal
     agentbox logs feature-x -f
     agentbox merge feature-x
     agentbox rm feature-x
@@ -71,11 +72,16 @@ Your app must read its ports from these env vars. Boxes can't share a hard-coded
 | `db refresh` | re-snapshot the source database |
 | `doctor [--fix]` | find and safely repair drift |
 | `ui [--no-open]` | open the web dashboard (signed in) |
+| `tui [--all]` | terminal dashboard: live boxes, logs, diff, actions, shell into a box |
 
 ## Dashboard and box URLs
 
 `agentbox ui` opens `http://127.0.0.1:7777/ui/`, signed in via a one-time link, and shows every repo
 and box live: state, logs, diff, doctor, and the same create/start/stop/merge/remove actions as the CLI.
+
+`agentbox tui` is the terminal version: a live table of every box (`r` cycles repos, `/` filters),
+`enter` for a box's overview, logs and diff, `s`/`x`/`m` to start-stop, remove and merge, `e` to open
+a shell inside the box with its env, `o` to open its URL, `d` for doctor, `?` for every key.
 
 Every box with ports is also served at **`http://<box>.localhost:7777/`** (or
 `http://<box>.<repo-slug>.localhost:7777/` when two repos share a box name). The daemon forwards to the
@@ -97,4 +103,4 @@ Boxes live in `~/.agentbox/boxes/`, outside your repo, so your file watchers nev
 
 ## Roadmap
 
-Terminal UI → Docker Compose & MySQL drivers → desktop app.
+Docker Compose & MySQL drivers → desktop app.

@@ -241,3 +241,37 @@ func (c *Client) LoginCode(ctx context.Context) (api.LoginCode, error) {
 	var lc api.LoginCode
 	return lc, c.do(ctx, "POST", "/v1/ui/login-codes", nil, &lc)
 }
+
+// Repos lists every repo the daemon knows.
+func (c *Client) Repos(ctx context.Context) ([]api.RepoView, error) {
+	var out []api.RepoView
+	return out, c.do(ctx, "GET", "/v1/repos", nil, &out)
+}
+
+// LogLines streams a box's log: the last tail lines, then every new line
+// until ctx is done. The channel is closed when the stream ends.
+func (c *Client) LogLines(ctx context.Context, repoID, name string, tail int) (<-chan string, error) {
+	path := fmt.Sprintf("%s/logs?tail=%d&follow=true", boxPath(repoID, name), tail)
+	resp, err := c.open(ctx, "GET", path, nil)
+	if err != nil {
+		return nil, err
+	}
+	ch := make(chan string, 256)
+	go func() {
+		defer close(ch)
+		defer resp.Body.Close()
+		_ = readSSE(resp.Body, func(_ string, data []byte) error {
+			var line string
+			if json.Unmarshal(data, &line) != nil {
+				return nil
+			}
+			select {
+			case ch <- line:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
+	}()
+	return ch, nil
+}
