@@ -22,13 +22,13 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/events"
-	"github.com/agentbox-dev/agentbox/internal/ports"
-	"github.com/agentbox-dev/agentbox/internal/proxy"
-	"github.com/agentbox-dev/agentbox/internal/state"
-	"github.com/agentbox-dev/agentbox/internal/ui"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/events"
+	"github.com/Ayush2966/Agent-Box/internal/ports"
+	"github.com/Ayush2966/Agent-Box/internal/proxy"
+	"github.com/Ayush2966/Agent-Box/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/ui"
 )
 
 type Paths struct {

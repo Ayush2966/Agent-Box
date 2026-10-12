@@ -13,7 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 // Postgres clones from a template snapshot (<src>_agentbox_tpl) built with

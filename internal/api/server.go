@@ -13,10 +13,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/events"
-	"github.com/agentbox-dev/agentbox/internal/ui"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/events"
+	"github.com/Ayush2966/Agent-Box/internal/ui"
 )
 
 type Server struct {

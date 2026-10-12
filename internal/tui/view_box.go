@@ -10,7 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/api"
 )
 
 type boxTab int

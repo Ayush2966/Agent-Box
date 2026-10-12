@@ -256,10 +256,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 // fake is an in-memory API: one repo with one running box unless a test changes it.
@@ -720,9 +720,9 @@ package tui
 import (
 	"context"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/client"
 )
 
 // API is the slice of the daemon client the TUI uses. *client.Client satisfies it;
@@ -757,10 +757,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 type (
@@ -906,8 +906,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/events"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/events"
 )
 
 func terminalState(s string) bool {
@@ -1049,7 +1049,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 var (
@@ -1300,8 +1300,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/client"
 )
 
 type mode int
@@ -1738,7 +1738,7 @@ func openBrowser(u string) error {
 }
 ```
 
-(`model.go`'s import block must also list `"github.com/agentbox-dev/agentbox/internal/box"` for `box.MergeOptions`.)
+(`model.go`'s import block must also list `"github.com/Ayush2966/Agent-Box/internal/box"` for `box.MergeOptions`.)
 
 - [ ] **Step 7: `view_boxes.go` and the three stubs**
 
@@ -1756,7 +1756,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/api"
 )
 
 // visibleBoxes applies the repo filter and the name query, sorted by repo then name.
@@ -2297,7 +2297,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/api"
 )
 
 type boxTab int
@@ -2611,8 +2611,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/box"
 )
 
 var nameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,30}$`)
@@ -2831,7 +2831,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/box"
 )
 
 type doctorState struct {
@@ -2944,10 +2944,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/daemon"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/daemon"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 // TestAgainstRealDaemon runs the model's commands against a live daemon and a
@@ -3107,7 +3107,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/agentbox-dev/agentbox/internal/tui"
+	"github.com/Ayush2966/Agent-Box/internal/tui"
 )
 
 func (a *app) tuiCmd() *cobra.Command {

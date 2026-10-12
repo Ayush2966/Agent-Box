@@ -255,7 +255,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 var ctx = context.Background()
@@ -425,8 +425,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/proc"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/proc"
 )
 
 // Executor runs the docker CLI. Docker is the real one; Recorder is for tests.
@@ -689,10 +689,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentbox-dev/agentbox/internal/compose"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/state"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/compose"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 const composeConfig = sqliteConfig + "compose:\n  services: [redis]\n  wait: 30s\n"
@@ -1000,7 +1000,7 @@ In `internal/state/state.go`:
 - [ ] **Step 4: Manager — deps, step, env, start/stop/remove**
 
 In `internal/box/manager.go`:
-1. Imports: add `"github.com/agentbox-dev/agentbox/internal/compose"`.
+1. Imports: add `"github.com/Ayush2966/Agent-Box/internal/compose"`.
 2. Steps: add `StepCompose = "compose"` after `StepEnv`.
 3. `Deps` gains `Compose compose.Executor // docker; nil = the real CLI`; in `NewManager`: `if d.Compose == nil { d.Compose = compose.Docker{} }`.
 4. `envVars`: replace the final `return append(kv, …)` with:
@@ -1433,7 +1433,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 // MySQL clones the source database per box with mysqldump | mysql. There is
@@ -1756,7 +1756,7 @@ Run: `go test ./internal/initcfg/ -run 'MySQL|ComposeFile'` — Expected: FAIL.
 - [ ] **Step 2: Implement the detection**
 
 In `internal/initcfg/initcfg.go`:
-1. Import `"github.com/agentbox-dev/agentbox/internal/compose"`.
+1. Import `"github.com/Ayush2966/Agent-Box/internal/compose"`.
 2. `driverOf`: add `case strings.HasPrefix(v, "mysql://"), strings.HasPrefix(v, "mariadb://"): return "mysql"` before the sqlite case.
 3. Add a package-level `var fixedHostPort = regexp.MustCompile(`"?\b(\d{2,5}):(\d{2,5})\b"?`)`.
 4. In `Detect`, after the `ports` lines are written and before the `db` switch:

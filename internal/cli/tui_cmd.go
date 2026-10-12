@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/agentbox-dev/agentbox/internal/tui"
+	"github.com/Ayush2966/Agent-Box/internal/tui"
 )
 
 func (a *app) tuiCmd() *cobra.Command {

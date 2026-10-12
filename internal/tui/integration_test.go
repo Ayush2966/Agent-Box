@@ -10,10 +10,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/daemon"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/daemon"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 // TestAgainstRealDaemon runs the model's commands against a live daemon and a

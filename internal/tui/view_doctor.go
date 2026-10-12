@@ -7,7 +7,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/box"
 )
 
 type doctorState struct {

@@ -9,7 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/api"
 )
 
 // visibleBoxes applies the repo filter and the name query, sorted by repo then name.

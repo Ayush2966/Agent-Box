@@ -13,10 +13,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/events"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/events"
 )
 
 func (a *app) newCmd() *cobra.Command {

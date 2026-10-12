@@ -4,9 +4,9 @@ package tui
 import (
 	"context"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/client"
 )
 
 // API is the slice of the daemon client the TUI uses. *client.Client satisfies it;

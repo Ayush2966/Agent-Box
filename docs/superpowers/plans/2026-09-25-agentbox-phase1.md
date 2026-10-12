@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Go module path: `github.com/agentbox-dev/agentbox`. To rename it later, change `go.mod` and run `grep -rl agentbox-dev/agentbox . | xargs sed -i '' 's#agentbox-dev/agentbox#<owner>/agentbox#g'`.
+- Go module path: `github.com/Ayush2966/Agent-Box`. To rename it later, change `go.mod` and run `grep -rl Ayush2966/Agent-Box . | xargs sed -i '' 's#Ayush2966/agentbox#<owner>/agentbox#g'`.
 - Go 1.24. `CGO_ENABLED=0` builds must work, so use no cgo dependencies.
 - Platforms: macOS and Linux only.
 - Box name must match `^[a-z0-9][a-z0-9-]{0,30}$`. Branch is `agentbox/<name>`.
@@ -102,7 +102,7 @@ agentbox/
 
 ```bash
 cd ~/Desktop/agentbox
-go mod init github.com/agentbox-dev/agentbox
+go mod init github.com/Ayush2966/Agent-Box
 go get gopkg.in/yaml.v3
 printf '/dist/\n/agentbox\n*.test\n' > .gitignore
 ```
@@ -1384,7 +1384,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 func addBox(t *testing.T, repo, name string) string {
@@ -2746,7 +2746,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentbox-dev/agentbox/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/config"
 )
 
 func countItems(t *testing.T, path string) int {
@@ -2836,7 +2836,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/agentbox-dev/agentbox/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/config"
 )
 
 // Clone identifies a box's database copy. URL is what goes into db.url_env.
@@ -3221,7 +3221,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 // Postgres clones from a template snapshot (<src>_agentbox_tpl) built with
@@ -3529,11 +3529,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/proc"
-	"github.com/agentbox-dev/agentbox/internal/state"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
-	"github.com/agentbox-dev/agentbox/internal/worktree"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/proc"
+	"github.com/Ayush2966/Agent-Box/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/worktree"
 )
 
 var ctx = context.Background()
@@ -3919,15 +3919,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/config"
-	"github.com/agentbox-dev/agentbox/internal/db"
-	"github.com/agentbox-dev/agentbox/internal/envfile"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/events"
-	"github.com/agentbox-dev/agentbox/internal/ports"
-	"github.com/agentbox-dev/agentbox/internal/proc"
-	"github.com/agentbox-dev/agentbox/internal/state"
-	"github.com/agentbox-dev/agentbox/internal/worktree"
+	"github.com/Ayush2966/Agent-Box/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/db"
+	"github.com/Ayush2966/Agent-Box/internal/envfile"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/events"
+	"github.com/Ayush2966/Agent-Box/internal/ports"
+	"github.com/Ayush2966/Agent-Box/internal/proc"
+	"github.com/Ayush2966/Agent-Box/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/worktree"
 )
 
 const BranchPrefix = "agentbox/"
@@ -4627,10 +4627,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/state"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
-	"github.com/agentbox-dev/agentbox/internal/worktree"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/worktree"
 )
 
 const plainConfig = "version: 1\nports: [APP_PORT]\ndev: echo started; sleep 30\n"
@@ -4842,12 +4842,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/agentbox-dev/agentbox/internal/config"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/events"
-	"github.com/agentbox-dev/agentbox/internal/proc"
-	"github.com/agentbox-dev/agentbox/internal/state"
-	"github.com/agentbox-dev/agentbox/internal/worktree"
+	"github.com/Ayush2966/Agent-Box/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/events"
+	"github.com/Ayush2966/Agent-Box/internal/proc"
+	"github.com/Ayush2966/Agent-Box/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/worktree"
 )
 
 // Info is a box plus live git status and its managed env vars.
@@ -5122,9 +5122,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/state"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 func kinds(fs []Finding) []string {
@@ -5221,11 +5221,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/agentbox-dev/agentbox/internal/config"
-	"github.com/agentbox-dev/agentbox/internal/db"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/events"
-	"github.com/agentbox-dev/agentbox/internal/worktree"
+	"github.com/Ayush2966/Agent-Box/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/db"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/events"
+	"github.com/Ayush2966/Agent-Box/internal/worktree"
 )
 
 type Finding struct {
@@ -5417,10 +5417,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/proc"
-	"github.com/agentbox-dev/agentbox/internal/state"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/proc"
+	"github.com/Ayush2966/Agent-Box/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 func newServer(t *testing.T) (*Server, string) {
@@ -5619,8 +5619,8 @@ package api
 import (
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 type RepoView struct {
@@ -5690,9 +5690,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/events"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/events"
 )
 
 type Server struct {
@@ -6071,11 +6071,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/daemon"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/daemon"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 // Unix socket paths are limited to ~104 bytes on macOS, so homes live under /tmp.
@@ -6208,11 +6208,11 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/events"
-	"github.com/agentbox-dev/agentbox/internal/ports"
-	"github.com/agentbox-dev/agentbox/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/events"
+	"github.com/Ayush2966/Agent-Box/internal/ports"
+	"github.com/Ayush2966/Agent-Box/internal/state"
 )
 
 type Paths struct {
@@ -6460,8 +6460,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/box"
 )
 
 const base = "http://agentbox"
@@ -6707,8 +6707,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentbox-dev/agentbox/internal/config"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 func detect(t *testing.T, files map[string]string) (Result, *config.Config) {
@@ -6798,7 +6798,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/agentbox-dev/agentbox/internal/envfile"
+	"github.com/Ayush2966/Agent-Box/internal/envfile"
 )
 
 type Result struct {
@@ -6898,7 +6898,7 @@ func Detect(root string) (Result, error) {
 
 	var b strings.Builder
 	b.WriteString("# Generated by `agentbox init`. Review it before committing.\n")
-	b.WriteString("# Reference: https://github.com/agentbox-dev/agentbox#configuration\n")
+	b.WriteString("# Reference: https://github.com/Ayush2966/Agent-Box#configuration\n")
 	b.WriteString("version: 1\n")
 	line := func(key, val, hint string) {
 		if val != "" {
@@ -6955,7 +6955,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/api"
 )
 
 func run(args ...string) (int, string, string) {
@@ -7021,10 +7021,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/daemon"
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/daemon"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 var Version = "dev"
@@ -7163,10 +7163,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/events"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/events"
 )
 
 func (a *app) newCmd() *cobra.Command {
@@ -7449,12 +7449,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/config"
-	"github.com/agentbox-dev/agentbox/internal/daemon"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/initcfg"
-	"github.com/agentbox-dev/agentbox/internal/worktree"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/daemon"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/initcfg"
+	"github.com/Ayush2966/Agent-Box/internal/worktree"
 )
 
 func (a *app) initCmd() *cobra.Command {
@@ -7680,7 +7680,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/api"
 )
 
 func formatPorts(p map[string]int) string {
@@ -7750,7 +7750,7 @@ package main
 import (
 	"os"
 
-	"github.com/agentbox-dev/agentbox/internal/cli"
+	"github.com/Ayush2966/Agent-Box/internal/cli"
 )
 
 func main() { os.Exit(cli.Execute()) }
@@ -7922,8 +7922,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	_ "modernc.org/sqlite"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 var bin string
@@ -8155,14 +8155,14 @@ builds:
     env: [CGO_ENABLED=0]
     goos: [darwin, linux]
     goarch: [amd64, arm64]
-    ldflags: ["-s -w -X github.com/agentbox-dev/agentbox/internal/cli.Version={{.Version}}"]
+    ldflags: ["-s -w -X github.com/Ayush2966/Agent-Box/internal/cli.Version={{.Version}}"]
 archives:
   - formats: [tar.gz]
 checksum:
   name_template: checksums.txt
 brews:
-  - repository: { owner: agentbox-dev, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
-    homepage: https://github.com/agentbox-dev/agentbox
+  - repository: { owner: Ayush2966, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
+    homepage: https://github.com/Ayush2966/Agent-Box
     description: Isolated dev environments for parallel AI coding agents
     license: MIT
 ```
@@ -8191,7 +8191,7 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 ```
 
-Check locally: `go run github.com/goreleaser/goreleaser/v2@latest check`. Expected: `config is valid`. (Publishing needs the `agentbox-dev/homebrew-tap` repo and a `HOMEBREW_TAP_TOKEN` secret. Those are one-time manual steps for the maintainer.)
+Check locally: `go run github.com/goreleaser/goreleaser/v2@latest check`. Expected: `config is valid`. (Publishing needs the `Ayush2966/homebrew-tap` repo and a `HOMEBREW_TAP_TOKEN` secret. Those are one-time manual steps for the maintainer.)
 
 - [ ] **Step 7: Write `LICENSE`**
 
@@ -8240,8 +8240,8 @@ c     running  APP_PORT=20002  myapp_agentbox_c  0      3
 
 ## Install
 
-    go install github.com/agentbox-dev/agentbox/cmd/agentbox@latest
-    # or: brew install agentbox-dev/tap/agentbox
+    go install github.com/Ayush2966/Agent-Box/cmd/agentbox@latest
+    # or: brew install Ayush2966/tap/agentbox
 
 macOS and Linux. Needs `git` ≥ 2.38, plus `pg_dump`/`pg_restore` if you use Postgres.
 

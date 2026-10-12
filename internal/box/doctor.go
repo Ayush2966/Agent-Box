@@ -8,13 +8,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/agentbox-dev/agentbox/internal/compose"
-	"github.com/agentbox-dev/agentbox/internal/config"
-	"github.com/agentbox-dev/agentbox/internal/db"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/events"
-	"github.com/agentbox-dev/agentbox/internal/state"
-	"github.com/agentbox-dev/agentbox/internal/worktree"
+	"github.com/Ayush2966/Agent-Box/internal/compose"
+	"github.com/Ayush2966/Agent-Box/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/db"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/events"
+	"github.com/Ayush2966/Agent-Box/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/worktree"
 )
 
 type Finding struct {

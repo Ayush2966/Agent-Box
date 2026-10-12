@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/agentbox-dev/agentbox/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/config"
 )
 
 // Clone identifies a box's database copy. URL is what goes into db.url_env.

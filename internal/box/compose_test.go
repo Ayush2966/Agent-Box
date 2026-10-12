@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentbox-dev/agentbox/internal/compose"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/state"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/compose"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 const composeConfig = sqliteConfig + "compose:\n  services: [redis]\n  wait: 30s\n"

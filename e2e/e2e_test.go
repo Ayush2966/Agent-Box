@@ -23,8 +23,8 @@ import (
 	"github.com/jackc/pgx/v5"
 	_ "modernc.org/sqlite"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 var bin string

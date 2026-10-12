@@ -7,14 +7,14 @@ builds:
     env: [CGO_ENABLED=0]
     goos: [darwin, linux]
     goarch: [amd64, arm64]
-    ldflags: ["-s -w -X github.com/agentbox-dev/agentbox/internal/cli.Version={{.Version}}"]
+    ldflags: ["-s -w -X github.com/Ayush2966/Agent-Box/internal/cli.Version={{.Version}}"]
 archives:
   - formats: [tar.gz]
 checksum:
   name_template: checksums.txt
 homebrew_casks:
-  - repository: { owner: agentbox-dev, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
-    homepage: https://github.com/agentbox-dev/agentbox
+  - repository: { owner: Ayush2966, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
+    homepage: https://github.com/Ayush2966/Agent-Box
     description: Isolated dev environments for parallel AI coding agents
     hooks:
       post:

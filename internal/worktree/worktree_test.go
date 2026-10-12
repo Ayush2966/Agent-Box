@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 func addBox(t *testing.T, repo, name string) string {

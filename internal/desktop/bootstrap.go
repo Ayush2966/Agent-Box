@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/daemon"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/daemon"
 )
 
 // bootstrapDeadline bounds how long Bootstrap waits for a daemon to answer.

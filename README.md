@@ -16,8 +16,8 @@ c     running  APP_PORT=20002  myapp_agentbox_c  0      3
 
 ## Install
 
-    go install github.com/agentbox-dev/agentbox/cmd/agentbox@latest
-    # or: brew install agentbox-dev/tap/agentbox
+    go install github.com/Ayush2966/Agent-Box/cmd/agentbox@latest
+    # or: brew install Ayush2966/tap/agentbox
 
 `go install` builds without the dashboard (everything else works; `agentbox ui` says so). Release
 binaries include it. From a checkout: `make build` (needs Node 20+).

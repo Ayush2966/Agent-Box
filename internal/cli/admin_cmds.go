@@ -11,12 +11,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/config"
-	"github.com/agentbox-dev/agentbox/internal/daemon"
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/initcfg"
-	"github.com/agentbox-dev/agentbox/internal/worktree"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/daemon"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/initcfg"
+	"github.com/Ayush2966/Agent-Box/internal/worktree"
 )
 
 func (a *app) initCmd() *cobra.Command {

@@ -8,7 +8,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 var (

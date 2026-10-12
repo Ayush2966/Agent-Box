@@ -12,7 +12,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 func TestNewMySQLValidatesURL(t *testing.T) {

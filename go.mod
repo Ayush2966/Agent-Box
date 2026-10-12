@@ -1,4 +1,4 @@
-module github.com/agentbox-dev/agentbox
+module github.com/Ayush2966/Agent-Box
 
 go 1.24.2
 

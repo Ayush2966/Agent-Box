@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentbox-dev/agentbox/internal/config"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 func detect(t *testing.T, files map[string]string) (Result, *config.Config) {

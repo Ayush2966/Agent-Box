@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/api"
 )
 
 func formatPorts(p map[string]int) string {

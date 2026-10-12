@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/client"
 )
 
 // API is the slice of the daemon client the bridge streams from.

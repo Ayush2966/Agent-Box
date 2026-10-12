@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentbox-dev/agentbox/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/config"
 )
 
 func countItems(t *testing.T, path string) int {

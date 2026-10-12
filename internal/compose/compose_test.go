@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 var ctx = context.Background()

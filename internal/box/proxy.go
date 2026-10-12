@@ -3,9 +3,9 @@ package box
 import (
 	"slices"
 
-	"github.com/agentbox-dev/agentbox/internal/config"
-	"github.com/agentbox-dev/agentbox/internal/proxy"
-	"github.com/agentbox-dev/agentbox/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/proxy"
+	"github.com/Ayush2966/Agent-Box/internal/state"
 )
 
 // ProxyTarget resolves a proxy host to a box: <name>.localhost when repoSlug

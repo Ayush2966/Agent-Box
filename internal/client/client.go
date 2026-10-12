@@ -14,8 +14,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/agentbox-dev/agentbox/internal/api"
-	"github.com/agentbox-dev/agentbox/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/api"
+	"github.com/Ayush2966/Agent-Box/internal/box"
 )
 
 const base = "http://agentbox"

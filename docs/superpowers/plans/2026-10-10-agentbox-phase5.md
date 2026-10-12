@@ -95,8 +95,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/daemon"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/daemon"
 )
 
 func TestBootstrapUsesRunningDaemon(t *testing.T) {
@@ -368,7 +368,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/daemon"
+	"github.com/Ayush2966/Agent-Box/internal/daemon"
 )
 
 // Bootstrap makes sure a daemon is serving home (ensure is daemon.EnsureRunning
@@ -451,7 +451,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/client"
 )
 
 // API is the slice of the daemon client the bridge streams from.
@@ -859,10 +859,10 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 
-	"github.com/agentbox-dev/agentbox/internal/cli"
-	"github.com/agentbox-dev/agentbox/internal/client"
-	"github.com/agentbox-dev/agentbox/internal/daemon"
-	"github.com/agentbox-dev/agentbox/internal/desktop"
+	"github.com/Ayush2966/Agent-Box/internal/cli"
+	"github.com/Ayush2966/Agent-Box/internal/client"
+	"github.com/Ayush2966/Agent-Box/internal/daemon"
+	"github.com/Ayush2966/Agent-Box/internal/desktop"
 )
 
 // App is bound into the window as window.go.main.App.
@@ -986,7 +986,7 @@ In `Makefile` add:
 ## desktop: build build/Agentbox.app (macOS only; needs Node 20+ and the Xcode Command Line Tools)
 desktop: ui
 	mkdir -p build
-	CGO_ENABLED=1 CGO_LDFLAGS="-framework UniformTypeIdentifiers" go build -tags desktop,production -ldflags "-s -w -X github.com/agentbox-dev/agentbox/internal/cli.Version=$$(git describe --tags --always 2>/dev/null || echo dev)" -o build/agentbox-desktop ./cmd/agentbox-desktop
+	CGO_ENABLED=1 CGO_LDFLAGS="-framework UniformTypeIdentifiers" go build -tags desktop,production -ldflags "-s -w -X github.com/Ayush2966/Agent-Box/internal/cli.Version=$$(git describe --tags --always 2>/dev/null || echo dev)" -o build/agentbox-desktop ./cmd/agentbox-desktop
 	sh desktop/mkapp.sh build/agentbox-desktop build/Agentbox.app "$$(git describe --tags --always 2>/dev/null || echo dev)"
 ```
 

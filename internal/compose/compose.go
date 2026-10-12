@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/errs"
-	"github.com/agentbox-dev/agentbox/internal/proc"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/proc"
 )
 
 // Executor runs the docker CLI. Docker is the real one; Recorder is for tests.

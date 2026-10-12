@@ -19,5 +19,5 @@ e2e:
 ## desktop: build build/Agentbox.app (macOS only; needs Node 20+ and the Xcode Command Line Tools)
 desktop: ui
 	mkdir -p build
-	CGO_ENABLED=1 CGO_LDFLAGS="-framework UniformTypeIdentifiers" go build -tags desktop,production -ldflags "-s -w -X github.com/agentbox-dev/agentbox/internal/cli.Version=$$(git describe --tags --always 2>/dev/null || echo dev)" -o build/agentbox-desktop ./cmd/agentbox-desktop
+	CGO_ENABLED=1 CGO_LDFLAGS="-framework UniformTypeIdentifiers" go build -tags desktop,production -ldflags "-s -w -X github.com/Ayush2966/Agent-Box/internal/cli.Version=$$(git describe --tags --always 2>/dev/null || echo dev)" -o build/agentbox-desktop ./cmd/agentbox-desktop
 	sh desktop/mkapp.sh build/agentbox-desktop build/Agentbox.app "$$(git describe --tags --always 2>/dev/null || echo dev)"

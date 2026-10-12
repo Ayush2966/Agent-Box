@@ -671,8 +671,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agentbox-dev/agentbox/internal/proxy"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/proxy"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 )
 
 func lowestPort(ports map[string]int) int {
@@ -805,9 +805,9 @@ package box
 import (
 	"slices"
 
-	"github.com/agentbox-dev/agentbox/internal/config"
-	"github.com/agentbox-dev/agentbox/internal/proxy"
-	"github.com/agentbox-dev/agentbox/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/config"
+	"github.com/Ayush2966/Agent-Box/internal/proxy"
+	"github.com/Ayush2966/Agent-Box/internal/state"
 )
 
 // ProxyTarget resolves a proxy host to a box: <name>.localhost when repoSlug
@@ -1381,7 +1381,7 @@ GET  /v1/health         → 200 HealthView
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `internal/api/server_test.go` (the file already imports `net/http`, `net/http/httptest`, `strings`, `testing`, `box`, `url`; add `"net"`, `"os"` and `"github.com/agentbox-dev/agentbox/internal/ui"` and `"testing/fstest"` to its import block):
+Append to `internal/api/server_test.go` (the file already imports `net/http`, `net/http/httptest`, `strings`, `testing`, `box`, `url`; add `"net"`, `"os"` and `"github.com/Ayush2966/Agent-Box/internal/ui"` and `"testing/fstest"` to its import block):
 
 ```go
 func tcpServer(t *testing.T) (*Server, *httptest.Server, string) {
@@ -1681,7 +1681,7 @@ func (s *Server) view(i box.Info) BoxView {
 }
 ```
 
-Then: in `listBoxes` replace `out = append(out, viewOf(i))` with `out = append(out, s.view(i))`; in `getBox` replace `writeJSON(w, 200, viewOf(info))` with `writeJSON(w, 200, s.view(info))`. Delete the old inline `GET /v1/health` closure. Add `"net"`, `"os"` and `"github.com/agentbox-dev/agentbox/internal/ui"` to the imports.
+Then: in `listBoxes` replace `out = append(out, viewOf(i))` with `out = append(out, s.view(i))`; in `getBox` replace `writeJSON(w, 200, viewOf(info))` with `writeJSON(w, 200, s.view(info))`. Delete the old inline `GET /v1/health` closure. Add `"net"`, `"os"` and `"github.com/Ayush2966/Agent-Box/internal/ui"` to the imports.
 
 - [ ] **Step 5: Run the whole package**
 
@@ -1802,7 +1802,7 @@ Expected: FAIL — `daemon.Dispatch`, `daemon.UIFS`, `p.APIAddr` undefined.
 
 In `internal/daemon/daemon.go`:
 
-1. Imports: add `"io/fs"`, `"github.com/agentbox-dev/agentbox/internal/proxy"`, `"github.com/agentbox-dev/agentbox/internal/ui"`.
+1. Imports: add `"io/fs"`, `"github.com/Ayush2966/Agent-Box/internal/proxy"`, `"github.com/Ayush2966/Agent-Box/internal/ui"`.
 
 2. `Paths`: add `APIAddr` to the struct and to `PathsFor`:
 
@@ -1937,7 +1937,7 @@ Run `go vet ./... && go test -race ./internal/daemon/ ./internal/api/`; record "
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `internal/cli/cli_test.go` (imports: add `"context"`, `"net/http"`, `"testing/fstest"`, `"time"`, `"github.com/agentbox-dev/agentbox/internal/daemon"`):
+Append to `internal/cli/cli_test.go` (imports: add `"context"`, `"net/http"`, `"testing/fstest"`, `"time"`, `"github.com/Ayush2966/Agent-Box/internal/daemon"`):
 
 ```go
 func TestUIPrintsALoginLinkThatSignsIn(t *testing.T) {

@@ -4,8 +4,8 @@ package api
 import (
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/errs"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/errs"
 )
 
 type RepoView struct {

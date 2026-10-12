@@ -17,11 +17,11 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/agentbox-dev/agentbox/internal/box"
-	"github.com/agentbox-dev/agentbox/internal/proc"
-	"github.com/agentbox-dev/agentbox/internal/state"
-	"github.com/agentbox-dev/agentbox/internal/testutil"
-	"github.com/agentbox-dev/agentbox/internal/ui"
+	"github.com/Ayush2966/Agent-Box/internal/box"
+	"github.com/Ayush2966/Agent-Box/internal/proc"
+	"github.com/Ayush2966/Agent-Box/internal/state"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
+	"github.com/Ayush2966/Agent-Box/internal/ui"
 )
 
 func newServer(t *testing.T) (*Server, string) {
