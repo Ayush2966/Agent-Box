@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestBetweenMarksIgnoresShellChatter(t *testing.T) {
@@ -28,9 +29,22 @@ func TestLoginPATHSurvivesAChattyShell(t *testing.T) {
 	if err := os.WriteFile(sh, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SHELL", sh)
-	if got := LoginPATH(); got != "/opt/homebrew/bin:/usr/bin:/bin" {
-		t.Fatalf("LoginPATH() = %q", got)
+	if got := loginPATH(sh, time.Minute); got != "/opt/homebrew/bin:/usr/bin:/bin" {
+		t.Fatalf("loginPATH() = %q", got)
+	}
+}
+
+func TestLoginPATHGivesUpOnAHungShell(t *testing.T) {
+	sh := filepath.Join(t.TempDir(), "sh")
+	if err := os.WriteFile(sh, []byte("#!/bin/sh\nsleep 30\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	if got := loginPATH(sh, 200*time.Millisecond); got != "" {
+		t.Fatalf("a hung shell must yield no PATH, got %q", got)
+	}
+	if time.Since(start) > 5*time.Second {
+		t.Fatal("the budget was not enforced")
 	}
 }
 
@@ -48,7 +62,7 @@ func TestLoginPATHAgainstTheRealShell(t *testing.T) {
 	default:
 		t.Skipf("%s is not a shell this test knows", sh)
 	}
-	got := LoginPATH()
+	got := loginPATH(sh, time.Minute) // a generous budget: this test is about the command line, not speed
 	if got == "" {
 		t.Skipf("%s printed no PATH here (a locked-down or non-interactive environment)", sh)
 	}
@@ -62,12 +76,10 @@ func TestLoginPATHIgnoresAShellThatSaysNothingUseful(t *testing.T) {
 	if err := os.WriteFile(sh, []byte("#!/bin/sh\necho hello\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("SHELL", sh)
-	if got := LoginPATH(); got != "" {
+	if got := loginPATH(sh, time.Minute); got != "" {
 		t.Fatalf("unmarked output must be discarded, got %q", got)
 	}
-	t.Setenv("SHELL", filepath.Join(t.TempDir(), "does-not-exist"))
-	if got := LoginPATH(); got != "" {
+	if got := loginPATH(filepath.Join(t.TempDir(), "does-not-exist"), time.Minute); got != "" {
 		t.Fatalf("a missing shell must give no PATH, got %q", got)
 	}
 }

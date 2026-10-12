@@ -35,12 +35,16 @@ func betweenMarks(out string) string {
 // launched by launchd with /usr/bin:/bin:/usr/sbin:/sbin, and the daemon this
 // app spawns inherits that, so pg_dump, mysqldump, docker and node would be
 // missing from boxes created out of the Dock.
-func LoginPATH() string {
-	sh := os.Getenv("SHELL")
+func LoginPATH() string { return loginPATH(os.Getenv("SHELL"), 3*time.Second) }
+
+// loginPATH is LoginPATH with the shell and the time budget injected, so the
+// tests can hand it a fake shell and a budget that does not depend on how
+// loaded the machine is.
+func loginPATH(sh string, budget time.Duration) string {
 	if sh == "" {
 		return ""
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
 	defer cancel()
 	// ${PATH} with braces: a bare $PATH would run into the marker and name a
 	// variable that does not exist, which prints nothing at all.
