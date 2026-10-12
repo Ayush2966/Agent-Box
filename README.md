@@ -22,7 +22,7 @@ c     running  APP_PORT=20002  myapp_agentbox_c  0      3
 `go install` builds without the dashboard (everything else works; `agentbox ui` says so). Release
 binaries include it. From a checkout: `make build` (needs Node 20+).
 
-macOS and Linux. Needs git ≥ 2.38, plus pg_dump/pg_restore for Postgres, mysql/mysqldump for MySQL, and Docker for compose.
+macOS and Linux. Needs git ≥ 2.38, plus pg_dump/pg_restore for Postgres, mysql/mysqldump for MySQL, and Docker with Compose v2.17+ (for `up --wait`) for compose.
 
 ## Quick start
 
@@ -105,10 +105,26 @@ own Compose project (`agentbox-<repo>-<box>`): own containers, own volumes, own 
 ports as `"${REDIS_PORT}:6379"` in the compose file and list `REDIS_PORT` under `ports:` — agentbox
 allocates a free port per box and the box's `.env` feeds it to Compose. The stack comes up with the
 box (`up -d --wait`), stops and starts with it, and is removed with `rm` (`down -v`). `doctor` finds
-projects without a box. See `examples/compose-redis`.
+projects without a box. A `container_name:` in the compose file prevents a second box (container names are host-unique), so
+leave it out. See `examples/compose-redis`.
 
 MySQL and MariaDB work like Postgres: `driver: mysql`, a `mysql://` source, and `mysql`/`mysqldump`
-on PATH. Each box gets `<db>_agentbox_<box>`, a fresh dump of the source. See `examples/node-mysql`.
+on PATH. Each box gets `<db>_agentbox_<box>`, a fresh dump of the source.
+The `db.source` user needs `CREATE` and `DROP` globally plus read access to the source (`SELECT`,
+`SHOW VIEW`, `TRIGGER`, `EVENT`; routines need `SHOW_ROUTINE` on MySQL 8.0.20 and later). When the server
+has GTIDs on, the dump is taken with `--set-gtid-purged=OFF`, which needs MySQL's own `mysqldump` (MariaDB's
+rejects the flag). See `examples/node-mysql`.
+
+## Desktop app
+
+`make desktop` builds `build/Agentbox.app` (macOS; needs Node 20+ and the Xcode Command Line Tools —
+the app is a native window around the same dashboard, so no second UI to maintain). It starts the
+daemon itself and opens signed in; box links open in your browser. The app binary is also the full
+`agentbox` CLI (`Agentbox.app/Contents/MacOS/agentbox-desktop ls` works). It is unsigned. A locally built
+app opens directly; the CI zip is quarantined, so the first launch is refused — allow it under System
+Settings → Privacy & Security → Open Anyway, or run `xattr -dr com.apple.quarantine Agentbox.app`. Launched from the Dock, the app widens `PATH` with your login shell's so the
+daemon finds `pg_dump`, `mysqldump`, `docker` and `node`. If startup fails after the daemon was spawned,
+the daemon keeps running; `agentbox daemon stop` stops it. CI attaches the `.app` zip to every run; releases do not include it yet.
 
 ## How it works
 
@@ -118,4 +134,4 @@ Boxes live in `~/.agentbox/boxes/`, outside your repo, so your file watchers nev
 
 ## Roadmap
 
-Desktop app.
+All five phases are in: core + CLI, web dashboard + proxy, terminal UI, Compose + MySQL, desktop app.

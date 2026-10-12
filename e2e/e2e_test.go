@@ -439,6 +439,15 @@ func TestComposeRedis(t *testing.T) {
 	if r := getJSON(t, b); r["hits"] != float64(1) || r["box"] != "b" {
 		t.Fatalf("box b has its own redis: %v", r)
 	}
+	e.run(repo, "stop", "a")
+	label := "label=com.docker.compose.project=" + prefix + "a"
+	if out, err := exec.Command("docker", "ps", "-q", "--filter", label).Output(); err != nil || strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("containers still running after stop: %q %v", out, err)
+	}
+	e.run(repo, "start", "a")
+	if r := getJSON(t, a); r["hits"] != float64(3) || r["box"] != "a" {
+		t.Fatalf("box a after stop/start must keep its redis state: %v", r)
+	}
 	e.run(repo, "rm", "--force", "a")
 	e.run(repo, "rm", "--force", "b")
 	if got := composeProjects(t, prefix); len(got) != 0 {

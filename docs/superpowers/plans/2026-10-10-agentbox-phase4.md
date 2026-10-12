@@ -26,7 +26,7 @@
 1. **A compose file whose service has a literal host port (`"6379:6379"`)** — the second box's `up` fails with a port-conflict; the user expects the box to roll back cleanly (containers of the failed box gone) and an error naming the `compose` step with the docker output. *(Task 3: `TestComposeUpFailureRollsBack`; Task 5 `init` warning test.)*
 2. **`agentbox rm` after the repo's compose file was deleted or `compose:` removed from the config** — the stack must still be torn down, because it is addressed by project name, not by file. *(Task 3: `TestRemoveDownsStackWithoutConfig`.)*
 3. **A MySQL clone name longer than 64 characters** — refused with a clear error before any dump runs. *(Task 4: `TestMySQLNameTooLong`.)*
-4. **A leftover clone database from a crashed earlier `new`** — the next `new` with the same box name must replace it, not fail on "database exists". *(Task 4: gated `TestMySQLCloneReplacesLeftover`; pure `TestMySQLCloneStatementsDropFirst` covers the SQL order.)*
+4. **A clone database that already exists (a leftover, or another checkout's live box)** — `new` must refuse with `exists` and point at `doctor --fix`, exactly like Postgres; it must never drop it. *(Task 4 as amended by the final review: `TestMySQLCloneRefusesExisting`; gated `TestMySQLCloneRefusesExistingLive`.)*
 5. **`docker` missing or the compose plugin absent** — `new` must fail at the `compose` step with the install hint, and `doctor` must report it only for repos that configure `compose:`. *(Task 3: `TestComposeMissingDockerHint`, `TestDoctorReportsMissingDockerOnlyWhenConfigured`.)*
 
 ---

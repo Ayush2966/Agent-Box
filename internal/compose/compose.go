@@ -172,12 +172,16 @@ func Projects(ctx context.Context, ex Executor, prefix string) ([]string, error)
 }
 
 // DownProject removes a project by name alone (Compose finds its containers
-// by label), so it works after the box dir or its compose file is gone.
-func DownProject(ctx context.Context, ex Executor, project string, log io.Writer) error {
-	return runLogged(ctx, ex, "", nil, log, []string{"compose", "-p", project, "down", "-v", "--remove-orphans"})
+// by label), so it works after the box dir or its compose file is gone. dir
+// must be a directory holding no compose file (the daemon's boxes dir):
+// Compose finds the project by label but would still load a compose file
+// found in the working directory.
+func DownProject(ctx context.Context, ex Executor, dir, project string, log io.Writer) error {
+	return runLogged(ctx, ex, dir, nil, log, []string{"compose", "-p", project, "down", "-v", "--remove-orphans"})
 }
 
-// StopProject stops a project's containers by name, keeping them and their volumes.
-func StopProject(ctx context.Context, ex Executor, project string, log io.Writer) error {
-	return runLogged(ctx, ex, "", nil, log, []string{"compose", "-p", project, "stop"})
+// StopProject stops a project's containers by name, keeping them and their
+// volumes. dir has the same requirement as in DownProject.
+func StopProject(ctx context.Context, ex Executor, dir, project string, log io.Writer) error {
+	return runLogged(ctx, ex, dir, nil, log, []string{"compose", "-p", project, "stop"})
 }

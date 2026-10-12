@@ -128,17 +128,21 @@ func TestProjectsAndDownProject(t *testing.T) {
 		t.Fatalf("%v", rec.Calls[0])
 	}
 	log := &bytes.Buffer{}
-	if err := DownProject(ctx, rec, "agentbox-app-1a2b3c-ghost", log); err != nil {
+	dir := t.TempDir()
+	if err := DownProject(ctx, rec, dir, "agentbox-app-1a2b3c-ghost", log); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Join(rec.Calls[1], " ") != "compose -p agentbox-app-1a2b3c-ghost down -v --remove-orphans" {
 		t.Fatalf("%v", rec.Calls[1])
 	}
-	if err := StopProject(ctx, rec, "agentbox-app-1a2b3c-a", log); err != nil {
+	if err := StopProject(ctx, rec, dir, "agentbox-app-1a2b3c-a", log); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Join(rec.Calls[2], " ") != "compose -p agentbox-app-1a2b3c-a stop" {
 		t.Fatalf("%v", rec.Calls[2])
+	}
+	if rec.Dirs[1] != dir || rec.Dirs[2] != dir {
+		t.Fatalf("by-name commands must run in %q, got %q and %q", dir, rec.Dirs[1], rec.Dirs[2])
 	}
 	bad := &Recorder{Stdout: map[string]string{"ls": "not json"}}
 	if _, err := Projects(ctx, bad, "agentbox-"); err == nil {

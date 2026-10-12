@@ -1,4 +1,5 @@
 import type { SSEState } from '../api/sse'
+import { wails } from '../api/wails'
 import type { Health, RepoView } from '../api/types'
 import { basename } from './bits'
 
@@ -44,9 +45,11 @@ export function TopBar(p: Props) {
       <button className="primary" onClick={p.onNew} disabled={!p.repo}>
         New box <kbd>n</kbd>
       </button>
-      <form method="post" action="/ui/logout">
-        <button className="quiet">Sign out</button>
-      </form>
+      {!wails() && (
+        <form method="post" action="/ui/logout">
+          <button className="quiet">Sign out</button>
+        </form>
+      )}
     </header>
   )
 }

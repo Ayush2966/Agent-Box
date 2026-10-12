@@ -89,7 +89,10 @@ func (m *Manager) Doctor(ctx context.Context, repoID string, fix bool) ([]Findin
 	for _, b := range boxes {
 		dirs[b.Dir], branches[b.Branch], names[b.Name] = true, true, true
 		if b.DBName != "" {
-			dbNames[b.DBName] = true
+			// Lower-cased: MySQL servers with lower_case_table_names=1 store
+			// the clone's name folded, and reporting a live box's database
+			// as an orphan would invite the user to drop it by hand.
+			dbNames[strings.ToLower(b.DBName)] = true
 		}
 		if b.State == state.Creating || b.State == state.Removing {
 			continue // mid-transition without the lock: a missing dir is expected, not drift
@@ -104,7 +107,9 @@ func (m *Manager) Doctor(ctx context.Context, repoID string, fix bool) ([]Findin
 				_ = drv.Drop(ctx, b.DBName, b.Dir)
 			}
 			if b.Compose != "" {
-				_ = compose.DownProject(ctx, m.d.Compose, b.Compose, io.Discard)
+				if err := compose.DownProject(ctx, m.d.Compose, m.stackDir(), b.Compose, io.Discard); err != nil {
+					add("compose", false, "box %q: compose project %s could not be removed: %v (remove it with `docker compose -p %s down -v`)", b.Name, b.Compose, err, b.Compose)
+				}
 			}
 			_ = m.d.Store.DeleteBox(b.RepoID, b.Name)
 			m.closeLog(b, true)
@@ -136,7 +141,7 @@ func (m *Manager) Doctor(ctx context.Context, repoID string, fix bool) ([]Findin
 	if drv != nil {
 		if names, err := drv.List(ctx); err == nil {
 			for _, n := range names {
-				if dbNames[n] {
+				if dbNames[strings.ToLower(n)] {
 					continue
 				}
 				fixed := fix && drv.Drop(ctx, n, "") == nil
@@ -157,7 +162,7 @@ func (m *Manager) Doctor(ctx context.Context, repoID string, fix bool) ([]Findin
 				if names[strings.TrimPrefix(p, prefix)] {
 					continue
 				}
-				fixed := fix && compose.DownProject(ctx, m.d.Compose, p, io.Discard) == nil
+				fixed := fix && compose.DownProject(ctx, m.d.Compose, m.stackDir(), p, io.Discard) == nil
 				add("orphan_compose", fixed, "compose project %s has no box (remove it with `docker compose -p %s down -v`)", p, p)
 			}
 		}

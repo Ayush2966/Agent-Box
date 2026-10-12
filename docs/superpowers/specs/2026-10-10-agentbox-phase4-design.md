@@ -70,8 +70,10 @@ tested); Kubernetes; managing Compose for the *main* checkout; MariaDB-specific 
   `db refresh` is therefore a no-op for MySQL (as for SQLite). Cost if wrong: add a template
   later behind the same `Driver` interface.
 - **R7 — Credentials never go on a MySQL command line.** `mysql`/`mysqldump` get a temporary
-  `--defaults-extra-file` (0600, deleted after) carrying host/port/user/password; the Go side
-  uses `go-sql-driver/mysql v1.9.3` (pinned; `go` directive stays 1.24.2). Cost if wrong: none.
+  `--defaults-file` (0600, deleted after) carrying host/port/user/password — `--defaults-file`,
+  not `--defaults-extra-file`, so a developer's `~/.my.cnf` cannot redirect the tools to another
+  server or user than `db.source`; the Go side uses `go-sql-driver/mysql v1.9.3` (pinned; `go`
+  directive stays 1.24.2). Cost if wrong: none.
 - **R8 — Testing without Docker or MySQL on the dev machine.** The compose driver takes an
   executor (`func(ctx, args, dir, env, out) error` plus a JSON lister); unit tests use a fake
   that records argv and scripts outputs. The MySQL driver's pure logic (DSN conversion, names,
@@ -108,7 +110,7 @@ stack's database). Each step registers its undo; compose's undo is `down -v --re
 |---|---|
 | new / start | `up -d --wait --wait-timeout <s> [services]` (`--wait` fails if a healthcheck fails) |
 | stop | `stop` |
-| rm, undo, doctor --fix | `down -v --remove-orphans` |
+| rm, undo, doctor --fix | `down -v --remove-orphans` by project name, run from the daemon's boxes directory (never a directory holding a compose file: Compose would load it) — the daemon also `chdir`s to its home at start so no inherited cwd leaks in |
 | doctor | `docker compose ls --all --format json` → projects named `agentbox-<slug>-*` with no box |
 
 `start` on a box with `compose:` brings the stack up before the dev server; if the stack fails
@@ -129,10 +131,14 @@ dir hits the box's stack) — appended after `AGENTBOX_ROOT`.
   parsed `SHOW GRANTS` for a CREATE privilege; dropped — grants are hard to parse reliably and
   `Clone`'s `CREATE DATABASE` reports the real error with a hint.)
 - `Prepare`: `Check`. `Refresh`: no-op.
-- `Clone`: `CREATE DATABASE <src>_agentbox_<box>` (`DROP` first if it exists — a leftover from
-  a crash), then `mysqldump --defaults-extra-file=… --single-transaction --routines --triggers
-  --events --no-tablespaces <src> | mysql --defaults-extra-file=… <clone>`. Name length ≤ 64.
-  The box URL is the source URL with the database path replaced.
+- `Clone`: refuses with `exists` (and the `doctor --fix` hint) when `<src>_agentbox_<box>`
+  already exists — exactly like Postgres; a leftover from a crash is the daemon's job
+  (`Recover` → `rm --force`) or doctor's (`orphan_db`), never a silent drop, because two
+  checkouts of one repo can share a source and a box name. Otherwise `CREATE DATABASE`, then
+  `mysqldump --defaults-file=… --single-transaction --routines --triggers --events
+  --no-tablespaces [--set-gtid-purged=OFF when the server reports gtid_mode ≠ OFF] <src>
+  | mysql --defaults-file=… <clone>`. Name length ≤ 64. The box URL is the source URL with the
+  database path replaced.
 - `Drop`: `DROP DATABASE IF EXISTS <name>`, refusing names outside the `<src>_agentbox_` prefix
   (same guard as Postgres).
 - `List`: `SHOW DATABASES`, filtered in Go by the `<src>_agentbox_` prefix (a `LIKE ?`
@@ -156,7 +162,8 @@ dir hits the box's stack) — appended after `AGENTBOX_ROOT`.
 - `examples/compose-redis`: `compose.yaml` with a `redis` service on `${REDIS_PORT}:6379`, a
   Node server that increments a counter in Redis and reports `{box, hits}`; `agentbox.yaml`
   with `ports: [APP_PORT, REDIS_PORT]`, `compose: {services: [redis]}`.
-- `examples/node-mysql`: the Postgres example's twin using `mysql2`.
+- `examples/node-mysql`: the Postgres example's twin (like it, the server reports the database
+  name from `DATABASE_URL` without connecting).
 
 ## 10. UI surfaces
 

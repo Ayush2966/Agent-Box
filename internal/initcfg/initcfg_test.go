@@ -146,6 +146,25 @@ func TestDetectMySQL(t *testing.T) {
 	}
 }
 
+func TestDetectComposeContainerName(t *testing.T) {
+	res, _ := detect(t, map[string]string{
+		"package.json": `{"scripts": {"dev": "node server.js"}}`,
+		".env.example": "PORT=3000\n",
+		"compose.yaml": "services:\n  redis:\n    image: redis:7\n    container_name: my-redis\n",
+	})
+	if !strings.Contains(strings.Join(res.Warnings, "\n"), "sets container_name") {
+		t.Fatalf("want a container_name warning, got %v", res.Warnings)
+	}
+	res, _ = detect(t, map[string]string{
+		"package.json": `{"scripts": {"dev": "node server.js"}}`,
+		".env.example": "PORT=3000\n",
+		"compose.yaml": "services:\n  redis:\n    image: redis:7\n",
+	})
+	if strings.Contains(strings.Join(res.Warnings, "\n"), "container_name") {
+		t.Fatalf("unexpected warning: %v", res.Warnings)
+	}
+}
+
 func TestDetectComposeFile(t *testing.T) {
 	res, cfg := detect(t, map[string]string{
 		"package.json": `{"scripts": {"dev": "node server.js"}}`,

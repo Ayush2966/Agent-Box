@@ -137,6 +137,15 @@ func (a *app) daemonCmd() *cobra.Command {
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 			daemon.Version = Version
+			// By-name compose commands inherit this cwd; keep it a directory
+			// that holds no compose file. Created first: a hand-run daemon
+			// on a fresh AGENTBOX_HOME has nothing to chdir into yet.
+			if err := os.MkdirAll(p.Home, 0o700); err != nil {
+				return err
+			}
+			if err := os.Chdir(p.Home); err != nil {
+				return err
+			}
 			return daemon.Run(ctx, p)
 		},
 	}

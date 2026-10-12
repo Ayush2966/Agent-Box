@@ -6,7 +6,7 @@ import { toasts } from '../store/toasts'
 import { DiffView } from './DiffView'
 import { LogView } from './LogView'
 import { RunButtons } from './RunButtons'
-import { StatePill, formatPorts } from './bits'
+import { ExternalLink, StatePill, formatPorts } from './bits'
 import { ConfirmDialog } from './confirm'
 
 type Tab = 'overview' | 'logs' | 'diff' | 'danger'
@@ -47,9 +47,9 @@ export function BoxPage({ repo, name, onBack }: { repo: string; name: string; on
         {state.steps[id] && <span className="muted">{state.steps[id]}…</span>}
         <span className="spacer" />
         {box.url && (
-          <a className="button" href={box.url} target="_blank" rel="noreferrer">
+          <ExternalLink className="button" href={box.url}>
             Open app ↗
-          </a>
+          </ExternalLink>
         )}
         <RunButtons box={box} />
       </header>
@@ -79,9 +79,7 @@ function Overview({ box }: { box: BoxView }) {
     [
       'url',
       box.url ? (
-        <a href={box.url} target="_blank" rel="noreferrer">
-          {box.url}
-        </a>
+        <ExternalLink href={box.url}>{box.url}</ExternalLink>
       ) : (
         '—'
       ),

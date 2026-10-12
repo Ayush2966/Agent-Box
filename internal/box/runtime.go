@@ -138,7 +138,7 @@ func (m *Manager) Stop(ctx context.Context, repoID, name string) error {
 	m.stopProc(b.ID())
 	var stackErr error
 	if b.Compose != "" {
-		stackErr = compose.StopProject(ctx, m.d.Compose, b.Compose, m.stackLog(b))
+		stackErr = compose.StopProject(ctx, m.d.Compose, m.stackDir(), b.Compose, m.stackLog(b))
 	}
 	if b.State != state.Running {
 		return stackErr

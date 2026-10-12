@@ -23,6 +23,7 @@ var (
 	portKey       = regexp.MustCompile(`(^|_)PORT$`)
 	dbKey         = regexp.MustCompile(`^(DATABASE_URL|DB_URL|POSTGRES_URL|DATABASE_PATH|SQLITE_PATH)$`)
 	fixedHostPort = regexp.MustCompile(`"?\b(\d{2,5}):(\d{2,5})\b"?`)
+	containerName = regexp.MustCompile(`(?m)^\s*container_name:`)
 	hardPort      = regexp.MustCompile(`(--port[ =]|-p ?|PORT=)\d{2,5}`)
 )
 
@@ -157,6 +158,10 @@ func Detect(root string) (Result, error) {
 			if m := fixedHostPort.FindString(string(data)); m != "" {
 				r.Warnings = append(r.Warnings, fmt.Sprintf(
 					"%s publishes a fixed host port (%s); write it as \"${VAR}:containerPort\" and list VAR under ports so boxes don't collide", name, m))
+			}
+			if containerName.Match(data) {
+				r.Warnings = append(r.Warnings, fmt.Sprintf(
+					"%s sets container_name, which Docker requires to be unique on the host; remove it so every box can run its own copy", name))
 			}
 		}
 		break

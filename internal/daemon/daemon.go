@@ -346,6 +346,7 @@ func EnsureRunning(p Paths) error {
 	defer out.Close()
 	cmd := exec.Command(exe, "daemon", "run")
 	cmd.Env = append(os.Environ(), "AGENTBOX_HOME="+p.Home)
+	cmd.Dir = p.Home
 	cmd.Stdout, cmd.Stderr = out, out
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	if err := cmd.Start(); err != nil {

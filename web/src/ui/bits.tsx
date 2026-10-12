@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react'
+import { wails } from '../api/wails'
 
 export function StatePill({ state }: { state: string }) {
   return <span className={`pill pill-${state}`}>{state}</span>
@@ -56,5 +57,36 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
         <div className="modal-body">{children}</div>
       </div>
     </div>
+  )
+}
+
+/** Opens a URL in the user's browser: via Wails inside the app, a new tab otherwise. */
+export function openExternal(url: string) {
+  try {
+    const u = new URL(url, location.href)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return
+  } catch {
+    return
+  }
+  const w = wails()
+  if (w) w.runtime.BrowserOpenURL(url)
+  else window.open(url, '_blank', 'noopener')
+}
+
+/** An anchor that opens outside the app window. */
+export function ExternalLink({ href, className, children }: { href: string; className?: string; children: ReactNode }) {
+  return (
+    <a
+      className={className}
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(e) => {
+        e.preventDefault()
+        openExternal(href)
+      }}
+    >
+      {children}
+    </a>
   )
 }

@@ -38,6 +38,17 @@ func newComposeRepo(t *testing.T, cfg string) string {
 	return repo
 }
 
+// assertRunDirs fails if an up/stop/down call ran without a working
+// directory (the Recorder records "" for Output calls, so other verbs are skipped).
+func assertRunDirs(t *testing.T, rec *compose.Recorder) {
+	t.Helper()
+	for i, v := range rec.Verbs() {
+		if (v == "up" || v == "stop" || v == "down") && rec.Dirs[i] == "" {
+			t.Errorf("call %d (%v) ran with no working directory", i, rec.Calls[i])
+		}
+	}
+}
+
 func TestComposeStepUpsStackAndSetsEnv(t *testing.T) {
 	rec := newRecorder()
 	m := newComposeManager(t, rec)
@@ -149,6 +160,7 @@ func TestComposeStartStopRunTheStack(t *testing.T) {
 	if got, _ := m.get(b.RepoID, "a"); got.State != state.Stopped {
 		t.Fatalf("the dev server must not start when the stack fails: state %s", got.State)
 	}
+	assertRunDirs(t, rec)
 }
 
 func TestRemoveDownsStackWithoutConfig(t *testing.T) {
@@ -167,6 +179,10 @@ func TestRemoveDownsStackWithoutConfig(t *testing.T) {
 	if verbs[len(verbs)-1] != "down" || !strings.Contains(strings.Join(rec.Calls[len(rec.Calls)-1], " "), "-p agentbox-"+b.RepoID+"-a down -v") {
 		t.Fatalf("rm must down the stack by project name: %v", rec.Calls)
 	}
+	if rec.Dirs[len(rec.Dirs)-1] != m.d.BoxesDir {
+		t.Fatalf("down ran in %q, want the boxes dir %q", rec.Dirs[len(rec.Dirs)-1], m.d.BoxesDir)
+	}
+	assertRunDirs(t, rec)
 	assertGone(t, m, repo, "a")
 }
 
@@ -208,6 +224,67 @@ func TestDoctorFindsOrphanComposeProject(t *testing.T) {
 	last := strings.Join(rec.Calls[len(rec.Calls)-1], " ")
 	if last != "compose -p "+prefix+"ghost down -v --remove-orphans" {
 		t.Fatalf("last docker call: %s", last)
+	}
+	if rec.Dirs[len(rec.Dirs)-1] != m.d.BoxesDir {
+		t.Fatalf("down ran in %q, want the boxes dir %q", rec.Dirs[len(rec.Dirs)-1], m.d.BoxesDir)
+	}
+	assertRunDirs(t, rec)
+}
+
+func TestByNameDownRecreatesMissingBoxesDir(t *testing.T) {
+	rec := newRecorder()
+	m := newComposeManager(t, rec)
+	repo := newComposeRepo(t, composeConfig)
+	b, err := m.New(ctx, NewOptions{RepoPath: repo, Name: "a", NoDev: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.RemoveAll(m.d.BoxesDir) // the user wiped ~/.agentbox/boxes; exec would fail to chdir
+	if _, err := m.Doctor(ctx, b.RepoID, true); err != nil {
+		t.Fatal(err)
+	}
+	downAt := -1
+	for i, c := range rec.Calls {
+		if strings.Contains(strings.Join(c, " "), "-p "+b.Compose+" down") {
+			downAt = i
+		}
+	}
+	if downAt < 0 || rec.Dirs[downAt] != m.d.BoxesDir {
+		t.Fatalf("doctor --fix must down %s from the boxes dir: calls %v dirs %q", b.Compose, rec.Calls, rec.Dirs)
+	}
+	if fi, err := os.Stat(m.d.BoxesDir); err != nil || !fi.IsDir() {
+		t.Fatalf("the boxes dir must be recreated before running docker there: %v", err)
+	}
+}
+
+func TestDoctorReportsComposeDownFailureOnMissingWorktree(t *testing.T) {
+	rec := newRecorder()
+	m := newComposeManager(t, rec)
+	repo := newComposeRepo(t, composeConfig)
+	b, err := m.New(ctx, NewOptions{RepoPath: repo, Name: "a", NoDev: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.RemoveAll(b.Dir)
+	rec.Fail = map[string]error{"down": errors.New("exit status 1")}
+	fs, err := m.Doctor(ctx, b.RepoID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var missing, comp *Finding
+	for i := range fs {
+		switch fs[i].Kind {
+		case "missing_worktree":
+			missing = &fs[i]
+		case "compose":
+			comp = &fs[i]
+		}
+	}
+	if missing == nil || !missing.Fixed {
+		t.Fatalf("the row must still be deleted: %+v", fs)
+	}
+	if comp == nil || comp.Fixed || !strings.Contains(comp.Detail, "docker compose -p "+b.Compose+" down -v") {
+		t.Fatalf("want an unfixed compose finding: %+v", fs)
 	}
 }
 

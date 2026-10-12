@@ -1,7 +1,7 @@
 import type { BoxView, RepoView } from '../api/types'
 import { formatRoute } from '../store/route'
 import { RunButtons } from './RunButtons'
-import { StatePill, formatPorts } from './bits'
+import { ExternalLink, StatePill, formatPorts } from './bits'
 
 interface Props {
   boxes: BoxView[]
@@ -53,9 +53,9 @@ export function BoxTable({ boxes, steps, repo, onOpen }: Props) {
               </td>
               <td>
                 {b.url ? (
-                  <a className="mono" href={b.url} target="_blank" rel="noreferrer">
+                  <ExternalLink className="mono" href={b.url}>
                     {b.url.replace(/^http:\/\//, '').replace(/\/$/, '')}
-                  </a>
+                  </ExternalLink>
                 ) : (
                   <span className="muted">—</span>
                 )}

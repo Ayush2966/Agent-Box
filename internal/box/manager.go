@@ -94,6 +94,14 @@ func NewManager(d Deps) *Manager {
 
 func (m *Manager) Bus() *events.Bus { return m.d.Bus }
 
+// stackDir is where by-name compose commands (stop/down -p <project>) run: the
+// boxes dir holds no compose file, and it is recreated here because exec fails
+// outright when its working directory is gone (a user may rm -rf it).
+func (m *Manager) stackDir() string {
+	_ = os.MkdirAll(m.d.BoxesDir, 0o700)
+	return m.d.BoxesDir
+}
+
 type NewOptions struct {
 	RepoPath   string `json:"repo_path"`
 	Name       string `json:"name"`
@@ -320,7 +328,9 @@ func (m *Manager) Build(ctx context.Context, b state.Box, cfg *config.Config, op
 		if err := m.d.Store.UpdateBox(b); err != nil {
 			return fail(StepCompose, err)
 		}
-		undo.push(func() error { return compose.DownProject(context.Background(), m.d.Compose, st.Project, m.stackLog(b)) })
+		undo.push(func() error {
+			return compose.DownProject(context.Background(), m.d.Compose, m.stackDir(), st.Project, m.stackLog(b))
+		})
 		if err := st.Up(ctx); err != nil {
 			return fail(StepCompose, err)
 		}
@@ -397,7 +407,7 @@ func (m *Manager) Remove(ctx context.Context, repoID, name string, opts RemoveOp
 	note := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
 	m.stopProc(b.ID())
 	if b.Compose != "" {
-		if err := compose.DownProject(ctx, m.d.Compose, b.Compose, m.stackLog(b)); err != nil {
+		if err := compose.DownProject(ctx, m.d.Compose, m.stackDir(), b.Compose, m.stackLog(b)); err != nil {
 			note("compose project %s was not removed: %v", b.Compose, err)
 		}
 	}

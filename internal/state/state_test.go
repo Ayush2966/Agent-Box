@@ -163,7 +163,7 @@ func TestDeleteBoxFreesPorts(t *testing.T) {
 }
 
 func TestBoxComposeRoundTrips(t *testing.T) {
-	s := openTest(t) // whatever helper the file uses to open a temp store
+	s := openTest(t)
 	r, _ := s.UpsertRepo("/tmp/r")
 	b := Box{RepoID: r.ID, Name: "a", Dir: "/tmp/boxes/a", Branch: "agentbox/a", State: Ready, Compose: "agentbox-" + r.ID + "-a"}
 	if err := s.InsertBox(b); err != nil {

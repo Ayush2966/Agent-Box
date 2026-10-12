@@ -3,11 +3,16 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
+
+	"github.com/agentbox-dev/agentbox/internal/errs"
 )
 
 func TestNewMySQLValidatesURL(t *testing.T) {
@@ -73,8 +78,8 @@ func TestMySQLDefaultsFileKeepsSecretsOffArgv(t *testing.T) {
 			t.Fatalf("defaults file lacks %q:\n%s", want, data)
 		}
 	}
-	args := m.dumpArgs(path)
-	if strings.Contains(strings.Join(args, " "), "hunter2") || args[0] != "--defaults-extra-file="+path {
+	args := m.dumpArgs(path, false)
+	if strings.Contains(strings.Join(args, " "), "hunter2") || args[0] != "--defaults-file="+path {
 		t.Fatalf("argv %v", args)
 	}
 	for _, want := range []string{"--single-transaction", "--no-tablespaces", "myapp"} {
@@ -83,7 +88,7 @@ func TestMySQLDefaultsFileKeepsSecretsOffArgv(t *testing.T) {
 		}
 	}
 	rargs := m.restoreArgs(path, "myapp_agentbox_a")
-	if len(rargs) != 2 || rargs[0] != "--defaults-extra-file="+path || rargs[1] != "myapp_agentbox_a" || strings.Contains(strings.Join(rargs, " "), "hunter2") {
+	if len(rargs) != 2 || rargs[0] != "--defaults-file="+path || rargs[1] != "myapp_agentbox_a" || strings.Contains(strings.Join(rargs, " "), "hunter2") {
 		t.Fatalf("restore argv %v", rargs)
 	}
 	cleanup()
@@ -92,14 +97,54 @@ func TestMySQLDefaultsFileKeepsSecretsOffArgv(t *testing.T) {
 	}
 }
 
-func TestMySQLCloneStatementsDropFirst(t *testing.T) {
+func TestMySQLCreateStatementAndPrefix(t *testing.T) {
 	m, _ := NewMySQL("mysql://u@h/myapp")
-	stmts := m.cloneStatements("myapp_agentbox_a")
-	if len(stmts) != 2 || !strings.HasPrefix(stmts[0], "DROP DATABASE IF EXISTS `myapp_agentbox_a`") || !strings.HasPrefix(stmts[1], "CREATE DATABASE `myapp_agentbox_a`") {
-		t.Fatalf("%v", stmts)
+	if got := m.createStatement("myapp_agentbox_a"); got != "CREATE DATABASE `myapp_agentbox_a`" {
+		t.Fatalf("%q", got)
 	}
 	if got := m.clonePrefix(); got != "myapp_agentbox_" {
 		t.Fatalf("prefix %q", got)
+	}
+}
+
+func TestMySQLDumpArgsGTID(t *testing.T) {
+	m, _ := NewMySQL("mysql://u@h/myapp")
+	if contains(m.dumpArgs("/p", false), "--set-gtid-purged=OFF") {
+		t.Fatal("flag present without gtid")
+	}
+	args := m.dumpArgs("/p", true)
+	if !contains(args, "--set-gtid-purged=OFF") || args[0] != "--defaults-file=/p" || args[len(args)-1] != "myapp" {
+		t.Fatalf("%v", args)
+	}
+}
+
+func TestMySQLIsCloneFoldsCase(t *testing.T) {
+	m, _ := NewMySQL("mysql://u@h/MyApp")
+	if !m.isClone("myapp_agentbox_a") || !m.isClone("MyApp_agentbox_a") {
+		t.Fatal("a lower_case_table_names=1 server stores the clone folded; Drop must still accept it")
+	}
+	for _, n := range []string{"MyApp_agentbox_", "other_agentbox_a", "MyApp_agentbox_a;x", ""} {
+		if m.isClone(n) {
+			t.Errorf("isClone(%q) must be false", n)
+		}
+	}
+}
+
+func TestMySQLCreateRaceMapsToExists(t *testing.T) {
+	if !isDBExists(&mysql.MySQLError{Number: 1007, Message: "Can't create database 'x'; database exists"}) {
+		t.Fatal("error 1007 must read as exists")
+	}
+	if isDBExists(&mysql.MySQLError{Number: 1044}) || isDBExists(errors.New("boom")) || isDBExists(nil) {
+		t.Fatal("only 1007 is exists")
+	}
+}
+
+func TestMySQLMatchesPrefix(t *testing.T) {
+	if !matchesPrefix("MyApp_agentbox_a", "myapp_agentbox_") || !matchesPrefix("myapp_agentbox_a", "myapp_agentbox_") {
+		t.Fatal("case-insensitive prefix must match")
+	}
+	if matchesPrefix("myapp_agentbo", "myapp_agentbox_") || matchesPrefix("other_agentbox_a", "myapp_agentbox_") {
+		t.Fatal("must not match")
 	}
 }
 
@@ -248,19 +293,43 @@ func TestMySQLCloneHasSourceRows(t *testing.T) {
 	}
 }
 
-func TestMySQLCloneReplacesLeftover(t *testing.T) {
+func TestMySQLCloneRefusesExistingLive(t *testing.T) {
 	src, conn := newMySQLSource(t)
 	m, _ := NewMySQL(src)
 	ctx := context.Background()
-	leftover := m.srcDB + "_agentbox_a"
-	if _, err := conn.Exec("CREATE DATABASE " + mysqlIdent(leftover)); err != nil { // an empty leftover from a crash
+	name := m.srcDB + "_agentbox_a"
+	for _, q := range []string{"CREATE DATABASE " + mysqlIdent(name), "CREATE TABLE " + mysqlIdent(name) + ".items(name VARCHAR(20))", "INSERT INTO " + mysqlIdent(name) + ".items VALUES('live')"} {
+		if _, err := conn.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := m.Clone(ctx, "a", "")
+	se := errs.From(err)
+	if err == nil || se.Code != errs.Exists || !strings.Contains(se.Hint, "doctor --fix") {
+		t.Fatalf("want Exists with a doctor hint, got %v", err)
+	}
+	var row string
+	if err := conn.QueryRow("SELECT name FROM " + mysqlIdent(name) + ".items").Scan(&row); err != nil || row != "live" {
+		t.Fatalf("the existing database was touched: %q %v (a reclone would hold 'one')", row, err)
+	}
+	if err := m.Drop(ctx, name, ""); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.Clone(ctx, "a", ""); err != nil {
-		t.Fatal(err)
+		t.Fatalf("clone after drop: %v", err)
 	}
-	if mysqlCount(t, conn, leftover) != 1 {
-		t.Fatal("the leftover was not replaced by a fresh clone")
+}
+
+func TestMySQLGTIDProbeMatchesServer(t *testing.T) {
+	src, conn := newMySQLSource(t)
+	m, _ := NewMySQL(src)
+	want := false
+	var mode string
+	if err := conn.QueryRow("SELECT @@global.gtid_mode").Scan(&mode); err == nil {
+		want = strings.ToUpper(mode) != "OFF"
+	}
+	if got := m.gtidPurgedFlag(context.Background(), conn); got != want {
+		t.Fatalf("gtidPurgedFlag = %v, want %v (gtid_mode %q)", got, want, mode)
 	}
 }
 
