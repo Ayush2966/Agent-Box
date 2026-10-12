@@ -230,3 +230,14 @@ func readSSE(r io.Reader, fn func(event string, data []byte) error) error {
 	}
 	return sc.Err()
 }
+
+func (c *Client) HealthInfo(ctx context.Context) (api.HealthView, error) {
+	var h api.HealthView
+	return h, c.do(ctx, "GET", "/v1/health", nil, &h)
+}
+
+// LoginCode mints a one-shot dashboard sign-in link.
+func (c *Client) LoginCode(ctx context.Context) (api.LoginCode, error) {
+	var lc api.LoginCode
+	return lc, c.do(ctx, "POST", "/v1/ui/login-codes", nil, &lc)
+}

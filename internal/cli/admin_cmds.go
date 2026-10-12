@@ -136,6 +136,7 @@ func (a *app) daemonCmd() *cobra.Command {
 			}
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
+			daemon.Version = Version
 			return daemon.Run(ctx, p)
 		},
 	}

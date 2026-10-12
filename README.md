@@ -19,6 +19,9 @@ c     running  APP_PORT=20002  myapp_agentbox_c  0      3
     go install github.com/agentbox-dev/agentbox/cmd/agentbox@latest
     # or: brew install agentbox-dev/tap/agentbox
 
+`go install` builds without the dashboard (everything else works; `agentbox ui` says so). Release
+binaries include it. From a checkout: `make build` (needs Node 20+).
+
 macOS and Linux. Needs `git` ≥ 2.38, plus `pg_dump`/`pg_restore` if you use Postgres.
 
 ## Quick start
@@ -26,6 +29,7 @@ macOS and Linux. Needs `git` ≥ 2.38, plus `pg_dump`/`pg_restore` if you use Po
     cd your-repo
     agentbox init          # writes a starter agentbox.yaml. Review it.
     agentbox new feature-x # prints the box dir: point your agent there
+    agentbox ui            # web dashboard; the box also answers at http://feature-x.localhost:7777/
     agentbox logs feature-x -f
     agentbox merge feature-x
     agentbox rm feature-x
@@ -39,6 +43,7 @@ version: 1
 setup: npm install            # runs once per new box
 dev: npm run dev              # supervised; restarted with backoff if it crashes
 ports: [APP_PORT, API_PORT]   # each gets a free port per box
+proxy: APP_PORT               # which port http://<box>.localhost:7777 forwards to (default: the first)
 db:
   driver: postgres            # postgres | sqlite
   url_env: DATABASE_URL
@@ -65,6 +70,24 @@ Your app must read its ports from these env vars. Boxes can't share a hard-coded
 | `rm <name> [--force] [--keep-branch]` | remove; asks before discarding work |
 | `db refresh` | re-snapshot the source database |
 | `doctor [--fix]` | find and safely repair drift |
+| `ui [--no-open]` | open the web dashboard (signed in) |
+
+## Dashboard and box URLs
+
+`agentbox ui` opens `http://127.0.0.1:7777/ui/`, signed in via a one-time link, and shows every repo
+and box live: state, logs, diff, doctor, and the same create/start/stop/merge/remove actions as the CLI.
+
+Every box with ports is also served at **`http://<box>.localhost:7777/`** (or
+`http://<box>.<repo-slug>.localhost:7777/` when two repos share a box name). The daemon forwards to the
+port named by `proxy:` in `agentbox.yaml` (default: the first of `ports`), WebSockets included. A box that
+is stopped or still being created gets an explanatory page instead of a connection error.
+
+Chrome, Edge and Firefox resolve `*.localhost` on their own. Safari and `curl` on macOS use the system
+resolver, which does not: use `curl -H 'Host: a.localhost' http://127.0.0.1:7777/`, or add
+`127.0.0.1 a.localhost` to `/etc/hosts`. Your app should use relative URLs (or honour `X-Forwarded-Host`)
+rather than redirecting to `http://localhost:3000`.
+
+`api_addr` in `~/.agentbox/config.yaml` must be a loopback address (`127.0.0.1:7777`, `localhost:7777`, `[::1]:7777`); the proxy and dashboard have no remote access, and a wildcard or LAN address is rejected at startup.
 
 ## How it works
 
@@ -74,4 +97,4 @@ Boxes live in `~/.agentbox/boxes/`, outside your repo, so your file watchers nev
 
 ## Roadmap
 
-Web dashboard → terminal UI → Docker Compose & MySQL drivers → desktop app.
+Terminal UI → Docker Compose & MySQL drivers → desktop app.

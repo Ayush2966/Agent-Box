@@ -118,3 +118,20 @@ func TestDetectUsesRealEnvForDriverOnly(t *testing.T) {
 		t.Fatal("expected a warning telling the user to fill in db.source by hand")
 	}
 }
+
+func TestDetectHintsProxyWhenSeveralPorts(t *testing.T) {
+	res, _ := detect(t, map[string]string{
+		"package.json": `{"scripts": {"dev": "node server.js"}}`,
+		".env.example": "PORT=3000\nAPI_PORT=4000\n",
+	})
+	if !strings.Contains(res.YAML, "# proxy: PORT") {
+		t.Fatalf("no proxy hint:\n%s", res.YAML)
+	}
+	res, _ = detect(t, map[string]string{
+		"package.json": `{"scripts": {"dev": "node server.js"}}`,
+		".env.example": "PORT=3000\n",
+	})
+	if strings.Contains(res.YAML, "proxy") {
+		t.Fatalf("proxy hint with one port:\n%s", res.YAML)
+	}
+}

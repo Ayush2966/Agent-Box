@@ -75,3 +75,26 @@ func TestSQLitePathStripsFilePrefix(t *testing.T) {
 		t.Fatalf("Path() = %q", got)
 	}
 }
+
+func TestProxyKey(t *testing.T) {
+	c, err := Parse([]byte("version: 1\nports: [APP_PORT, API_PORT]\nproxy: API_PORT\n"))
+	if err != nil || c.Proxy != "API_PORT" || c.ProxyPort() != "API_PORT" {
+		t.Fatalf("explicit proxy: %+v %v", c, err)
+	}
+	c, err = Parse([]byte("version: 1\nports: [APP_PORT, API_PORT]\n"))
+	if err != nil || c.ProxyPort() != "APP_PORT" {
+		t.Fatalf("default proxy should be the first port: %+v %v", c, err)
+	}
+	c, err = Parse([]byte("version: 1\n"))
+	if err != nil || c.ProxyPort() != "" {
+		t.Fatalf("no ports: %q %v", c.ProxyPort(), err)
+	}
+	_, err = Parse([]byte("version: 1\nports: [APP_PORT]\nproxy: WEB_PORT\n"))
+	if err == nil || !strings.Contains(err.Error(), "proxy") || !strings.Contains(err.Error(), "WEB_PORT") {
+		t.Fatalf("proxy not in ports: %v", err)
+	}
+	_, err = Parse([]byte("version: 1\nports: [APP_PORT]\nproxi: APP_PORT\n"))
+	if err == nil || !strings.Contains(err.Error(), `did you mean "proxy"`) {
+		t.Fatalf("typo suggestion: %v", err)
+	}
+}

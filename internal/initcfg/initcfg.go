@@ -138,6 +138,9 @@ func Detect(root string) (Result, error) {
 	line("dev", dev, "<command that starts the dev server, e.g. npm run dev>")
 	if len(portKeys) > 0 {
 		fmt.Fprintf(&b, "ports: [%s]\n", strings.Join(portKeys, ", "))
+		if len(portKeys) > 1 {
+			fmt.Fprintf(&b, "# proxy: %s  # which port http://<box>.localhost:7777 serves (default: the first)\n", portKeys[0])
+		}
 	} else {
 		b.WriteString("ports: []  # env var names that get a free port per box, e.g. [PORT]\n")
 	}

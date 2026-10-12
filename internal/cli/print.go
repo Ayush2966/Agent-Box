@@ -59,6 +59,9 @@ func printBox(out io.Writer, b api.BoxView) {
 	fmt.Fprintf(out, "  dir     %s\n", b.Dir)
 	fmt.Fprintf(out, "  branch  %s\n", b.Branch)
 	fmt.Fprintf(out, "  ports   %s\n", formatPorts(b.Ports))
+	if b.URL != "" {
+		fmt.Fprintf(out, "  url     %s\n", b.URL)
+	}
 	if b.DBName != "" {
 		fmt.Fprintf(out, "  db      %s\n", b.DBName)
 	}

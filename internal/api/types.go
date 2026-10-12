@@ -13,6 +13,20 @@ type RepoView struct {
 	Path string `json:"path"`
 }
 
+type HealthView struct {
+	OK      bool   `json:"ok"`
+	PID     int    `json:"pid"`
+	Version string `json:"version"`
+	APIAddr string `json:"api_addr"` // "" when the HTTP API is disabled
+	UI      bool   `json:"ui"`       // whether a dashboard is built into this binary
+}
+
+type LoginCode struct {
+	Code      string    `json:"code"`
+	URL       string    `json:"url"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
 type BoxView struct {
 	ID        string            `json:"id"`
 	Repo      string            `json:"repo"`
@@ -31,6 +45,7 @@ type BoxView struct {
 	Ahead     int               `json:"ahead"`
 	Behind    int               `json:"behind"`
 	Dirty     int               `json:"dirty"`
+	URL       string            `json:"url,omitempty"` // http://<name>.localhost:<port>/ when the box has ports
 	Env       map[string]string `json:"env,omitempty"`
 	CreatedAt time.Time         `json:"created_at"`
 }

@@ -2,12 +2,17 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
+	"time"
 
 	"github.com/agentbox-dev/agentbox/internal/api"
+	"github.com/agentbox-dev/agentbox/internal/daemon"
 )
 
 func run(args ...string) (int, string, string) {
@@ -77,5 +82,92 @@ func TestDaemonStopSaysWhenNothingWasRunning(t *testing.T) {
 	code, out, stderr := run("daemon", "stop")
 	if code != 0 || !strings.Contains(out, "not running") {
 		t.Fatalf("exit %d\nstdout: %s\nstderr: %s", code, out, stderr)
+	}
+}
+
+func TestUIPrintsALoginLinkThatSignsIn(t *testing.T) {
+	daemon.UIFS = fstest.MapFS{"index.html": {Data: []byte("<div id=\"root\"></div>")}}
+	t.Cleanup(func() { daemon.UIFS = nil })
+	home := shortTempHome(t)
+	t.Setenv("AGENTBOX_HOME", home)
+	os.WriteFile(filepath.Join(home, "config.yaml"), []byte("api_addr: 127.0.0.1:0\n"), 0o600)
+	p := daemon.PathsFor(home)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go daemon.Run(ctx, p)
+	deadline := time.Now().Add(5 * time.Second)
+	for !daemon.Ping(p.Sock) {
+		if time.Now().After(deadline) {
+			t.Fatal("daemon never came up")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	code, out, stderr := run("ui", "--no-open")
+	if code != 0 || !strings.HasPrefix(out, "dashboard: http://127.0.0.1:") || !strings.Contains(out, "/ui/login?code=") {
+		t.Fatalf("exit %d\nstdout: %s\nstderr: %s", code, out, stderr)
+	}
+	link := strings.TrimSpace(strings.TrimPrefix(out, "dashboard: "))
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := noRedirect.Get(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 303 || resp.Header.Get("Location") != "/ui/" {
+		t.Fatalf("login link: %d %q", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	var session *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == "agentbox_session" {
+			session = c
+		}
+	}
+	if session == nil {
+		t.Fatal("no session cookie")
+	}
+	req, _ := http.NewRequest("GET", strings.Split(link, "/ui/login")[0]+"/v1/boxes", nil)
+	req.AddCookie(session)
+	resp2, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != 200 {
+		t.Fatalf("cookie did not authenticate: %d", resp2.StatusCode)
+	}
+}
+
+func TestUIExplainsAMissingDashboard(t *testing.T) {
+	daemon.UIFS = fstest.MapFS{".gitkeep": {}}
+	t.Cleanup(func() { daemon.UIFS = nil })
+	home := shortTempHome(t)
+	t.Setenv("AGENTBOX_HOME", home)
+	os.WriteFile(filepath.Join(home, "config.yaml"), []byte("api_addr: 127.0.0.1:0\n"), 0o600)
+	p := daemon.PathsFor(home)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go daemon.Run(ctx, p)
+	for deadline := time.Now().Add(5 * time.Second); !daemon.Ping(p.Sock); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("daemon never came up")
+		}
+	}
+	code, _, stderr := run("ui", "--no-open")
+	if code != 1 || !strings.Contains(stderr, "built without the dashboard") {
+		t.Fatalf("exit %d, stderr %q", code, stderr)
+	}
+}
+
+func TestPrintBoxShowsURL(t *testing.T) {
+	var b bytes.Buffer
+	printBox(&b, api.BoxView{Name: "a", State: "running", Dir: "/tmp/x", Branch: "agentbox/a", Ports: map[string]int{"APP_PORT": 20000}, URL: "http://a.localhost:7777/"})
+	if !strings.Contains(b.String(), "url     http://a.localhost:7777/") {
+		t.Fatalf("no url line:\n%s", b.String())
+	}
+	b.Reset()
+	printBox(&b, api.BoxView{Name: "a", State: "ready"})
+	if strings.Contains(b.String(), "url") {
+		t.Fatalf("url line without a URL:\n%s", b.String())
 	}
 }

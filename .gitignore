@@ -3,3 +3,6 @@
 *.test
 .DS_Store
 /.superpowers/
+/internal/ui/dist/*
+!/internal/ui/dist/.gitkeep
+/web/node_modules/

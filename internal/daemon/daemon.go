@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -25,11 +26,13 @@ import (
 	"github.com/agentbox-dev/agentbox/internal/box"
 	"github.com/agentbox-dev/agentbox/internal/events"
 	"github.com/agentbox-dev/agentbox/internal/ports"
+	"github.com/agentbox-dev/agentbox/internal/proxy"
 	"github.com/agentbox-dev/agentbox/internal/state"
+	"github.com/agentbox-dev/agentbox/internal/ui"
 )
 
 type Paths struct {
-	Home, State, Sock, PID, Token, Log, Logs, Boxes, Config, Out, Lock string
+	Home, State, Sock, PID, Token, Log, Logs, Boxes, Config, Out, Lock, APIAddr string
 }
 
 func PathsFor(home string) Paths {
@@ -37,7 +40,7 @@ func PathsFor(home string) Paths {
 	return Paths{
 		Home: home, State: j("state.db"), Sock: j("daemon.sock"), PID: j("daemon.pid"), Token: j("token"),
 		Log: j("agentbox.log"), Logs: j("logs"), Boxes: j("boxes"), Config: j("config.yaml"), Out: j("daemon.out"),
-		Lock: j("daemon.lock"),
+		Lock: j("daemon.lock"), APIAddr: j("api_addr"),
 	}
 }
 
@@ -54,6 +57,13 @@ func DefaultHome() (string, error) {
 
 // ErrAlreadyRunning means another daemon already owns this agentbox home.
 var ErrAlreadyRunning = errors.New("agentbox daemon is already running")
+
+// Version is reported by /v1/health; the CLI sets it before Run.
+var Version = "dev"
+
+// UIFS is the dashboard build the daemon serves. nil means ui.Dist(), the
+// one embedded in this binary; tests substitute a fake build.
+var UIFS fs.FS
 
 // lockHome takes an exclusive, process-lifetime lock on the agentbox home so
 // that exactly one daemon owns it, even when several CLI invocations auto-start
@@ -94,7 +104,19 @@ func LoadSettings(path string) (Settings, error) {
 	if len(s.PortRange) != 2 || s.PortRange[0] < 1024 || s.PortRange[1] > 65535 || s.PortRange[0] > s.PortRange[1] {
 		return s, fmt.Errorf("%s: port_range must be [low, high] within 1024-65535 (got %v)", path, s.PortRange)
 	}
+	host, _, err := net.SplitHostPort(s.APIAddr)
+	if err != nil || !isLoopbackHost(host) {
+		return s, fmt.Errorf("%s: api_addr must be a loopback address such as 127.0.0.1:7777 (got %q); remote access is not supported", path, s.APIAddr)
+	}
 	return s, nil
+}
+
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func Ping(sock string) bool {
@@ -199,8 +221,6 @@ func Run(ctx context.Context, p Paths) error {
 	if err := m.Recover(); err != nil {
 		return err
 	}
-	srv := &api.Server{M: m, Bus: bus, Token: token, Origins: origins(settings.APIAddr)}
-
 	_ = os.Remove(p.Sock) // stale socket from a crashed daemon (the home lock proves nobody owns it)
 	ul, err := net.Listen("unix", p.Sock)
 	if err != nil {
@@ -210,13 +230,34 @@ func Run(ctx context.Context, p Paths) error {
 		ul.Close()
 		return err
 	}
+	// Bind TCP before building the handlers: tests bind port 0, and the box
+	// URLs and login links need the port that was actually chosen.
+	apiAddr := ""
+	tl, err := net.Listen("tcp", settings.APIAddr)
+	if err != nil {
+		slog.Warn("HTTP API disabled", "addr", settings.APIAddr, "err", err)
+		_ = os.Remove(p.APIAddr)
+	} else {
+		apiAddr = tl.Addr().String()
+		if err := os.WriteFile(p.APIAddr, []byte(apiAddr+"\n"), 0o600); err != nil {
+			ul.Close()
+			tl.Close()
+			return err
+		}
+	}
+	dist := UIFS
+	if dist == nil {
+		dist = ui.Dist()
+	}
+	codes := ui.NewLoginCodes()
+	srv := &api.Server{M: m, Bus: bus, Token: token, Origins: origins(apiAddr), Codes: codes,
+		UI: ui.Handler(ui.Options{Token: token, Codes: codes, FS: dist}), APIAddr: apiAddr, Version: Version, UIBuilt: ui.Built(dist)}
+	px := proxy.New(proxy.Options{Lookup: m.ProxyTarget, Dashboard: "http://" + apiAddr + "/ui/"})
 	base := func(net.Listener) context.Context { return ctx } // cancels SSE streams on shutdown
 	servers := []*http.Server{{Handler: srv.Handler(false), BaseContext: base}}
 	listeners := []net.Listener{ul}
-	if tl, err := net.Listen("tcp", settings.APIAddr); err != nil {
-		slog.Warn("HTTP API disabled", "addr", settings.APIAddr, "err", err)
-	} else {
-		servers = append(servers, &http.Server{Handler: srv.Handler(true), BaseContext: base})
+	if tl != nil {
+		servers = append(servers, &http.Server{Handler: Dispatch(px, srv.Handler(true)), BaseContext: base})
 		listeners = append(listeners, tl)
 	}
 	if err := os.WriteFile(p.PID, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
@@ -231,7 +272,7 @@ func Run(ctx context.Context, p Paths) error {
 			}
 		}()
 	}
-	slog.Info("daemon started", "pid", os.Getpid(), "sock", p.Sock, "api", settings.APIAddr)
+	slog.Info("daemon started", "pid", os.Getpid(), "sock", p.Sock, "api", apiAddr)
 
 	var runErr error
 	select {
@@ -246,16 +287,44 @@ func Run(ctx context.Context, p Paths) error {
 	}
 	_ = os.Remove(p.Sock)
 	_ = os.Remove(p.PID)
+	_ = os.Remove(p.APIAddr)
 	slog.Info("daemon stopped")
 	return runErr
 }
 
 func origins(addr string) []string {
+	if addr == "" {
+		return nil
+	}
 	out := []string{"http://" + addr}
 	if _, port, err := net.SplitHostPort(addr); err == nil {
-		out = append(out, "http://localhost:"+port, "http://127.0.0.1:"+port)
+		out = append(out, "http://localhost:"+port, "http://127.0.0.1:"+port, "http://[::1]:"+port)
 	}
 	return out
+}
+
+// Dispatch is the TCP listener's root: *.localhost hosts go to the box proxy,
+// loopback hosts to the API and dashboard, and any other Host is refused.
+// A page at evil.example whose DNS now points at 127.0.0.1 still sends
+// "Host: evil.example", which is what makes this the rebinding defence.
+func Dispatch(px, app http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		host = strings.Trim(host, "[]")
+		host = strings.ToLower(strings.TrimSuffix(host, "."))
+		switch {
+		case proxy.IsProxyHost(host):
+			px.ServeHTTP(w, r)
+		case host == "127.0.0.1" || host == "localhost" || host == "::1":
+			app.ServeHTTP(w, r)
+		default:
+			http.Error(w, "agentbox answers only to 127.0.0.1, localhost and *.localhost, not to Host "+strconv.Quote(r.Host),
+				http.StatusMisdirectedRequest)
+		}
+	})
 }
 
 // EnsureRunning starts the daemon in the background if it isn't answering.

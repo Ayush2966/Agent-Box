@@ -5,18 +5,23 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/agentbox-dev/agentbox/internal/box"
 	"github.com/agentbox-dev/agentbox/internal/proc"
 	"github.com/agentbox-dev/agentbox/internal/state"
 	"github.com/agentbox-dev/agentbox/internal/testutil"
+	"github.com/agentbox-dev/agentbox/internal/ui"
 )
 
 func newServer(t *testing.T) (*Server, string) {
@@ -250,4 +255,188 @@ func repoID(t *testing.T, base, repo string) string {
 		t.Fatalf("resolve repo: %d", code)
 	}
 	return rv.ID
+}
+
+func tcpServer(t *testing.T) (*Server, *httptest.Server, string) {
+	t.Helper()
+	srv, repo := newServer(t)
+	srv.Codes = ui.NewLoginCodes()
+	srv.UI = ui.Handler(ui.Options{Token: srv.Token, Codes: srv.Codes, FS: fstest.MapFS{"index.html": {Data: []byte("<div id=\"root\"></div>")}}})
+	srv.Version = "test"
+	srv.UIBuilt = true
+	ts := httptest.NewServer(srv.Handler(true))
+	t.Cleanup(ts.Close)
+	srv.APIAddr = strings.TrimPrefix(ts.URL, "http://")
+	srv.Origins = []string{ts.URL}
+	return srv, ts, repo
+}
+
+func send(t *testing.T, ts *httptest.Server, method, path string, hdr map[string]string, body string) (int, string) {
+	t.Helper()
+	req, _ := http.NewRequest(method, ts.URL+path, strings.NewReader(body))
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	for k, v := range hdr {
+		req.Header.Set(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
+}
+
+func TestHealthReportsDaemonFacts(t *testing.T) {
+	srv, ts, _ := tcpServer(t)
+	var h HealthView
+	req, _ := http.NewRequest("GET", ts.URL+"/v1/health", nil)
+	req.Header.Set("Authorization", "Bearer "+srv.Token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	json.NewDecoder(resp.Body).Decode(&h)
+	if resp.Header.Get("Cache-Control") != "no-store" {
+		t.Errorf("Cache-Control = %q", resp.Header.Get("Cache-Control"))
+	}
+	if !h.OK || h.PID != os.Getpid() || h.Version != "test" || h.APIAddr != srv.APIAddr || !h.UI {
+		t.Fatalf("%+v", h)
+	}
+}
+
+func TestLoginCodesNeedTokenOnTCPButNotOnSocket(t *testing.T) {
+	srv, ts, _ := tcpServer(t)
+	if code, _ := send(t, ts, "POST", "/v1/ui/login-codes", nil, ""); code != 401 {
+		t.Fatalf("no token: %d", code)
+	}
+	code, body := send(t, ts, "POST", "/v1/ui/login-codes", map[string]string{"Authorization": "Bearer " + srv.Token}, "")
+	var lc LoginCode
+	json.Unmarshal([]byte(body), &lc)
+	if code != 201 || len(lc.Code) != 64 || lc.URL != ts.URL+"/ui/login?code="+lc.Code || lc.ExpiresAt.IsZero() {
+		t.Fatalf("%d %s", code, body)
+	}
+	sock := httptest.NewServer(srv.Handler(false)) // the unix-socket handler: no auth
+	t.Cleanup(sock.Close)
+	if code, _ := send(t, sock, "POST", "/v1/ui/login-codes", nil, ""); code != 201 {
+		t.Fatalf("socket: %d", code)
+	}
+	if code, _ := send(t, sock, "GET", "/ui/", nil, ""); code != 404 {
+		t.Fatalf("the socket handler must not serve the dashboard: %d", code)
+	}
+	srv.APIAddr = ""
+	if code, body := send(t, sock, "POST", "/v1/ui/login-codes", nil, ""); code != 412 || !strings.Contains(body, "disabled") {
+		t.Fatalf("HTTP API off: %d %s", code, body)
+	}
+}
+
+func TestSessionCookieAuth(t *testing.T) {
+	srv, ts, repo := tcpServer(t)
+	cookie := map[string]string{"Cookie": ui.SessionCookie + "=" + srv.Token}
+	if code, _ := send(t, ts, "GET", "/v1/boxes", cookie, ""); code != 200 {
+		t.Fatalf("cookie GET: %d", code)
+	}
+	if code, _ := send(t, ts, "GET", "/v1/boxes", map[string]string{"Cookie": ui.SessionCookie + "=wrong"}, ""); code != 401 {
+		t.Fatalf("wrong cookie: %d", code)
+	}
+	body := `{"path":` + strconv.Quote(repo) + `}`
+	withOrigin := map[string]string{"Cookie": cookie["Cookie"], "Origin": ts.URL}
+	if code, b := send(t, ts, "POST", "/v1/repos", withOrigin, body); code != 200 {
+		t.Fatalf("cookie POST with Origin: %d %s", code, b)
+	}
+	crossSite := map[string]string{"Cookie": cookie["Cookie"], "Origin": ts.URL, "Sec-Fetch-Site": "cross-site"}
+	if code, _ := send(t, ts, "POST", "/v1/repos", crossSite, body); code != 403 {
+		t.Fatalf("cross-site POST: %d", code)
+	}
+	badOrigin := map[string]string{"Cookie": cookie["Cookie"], "Origin": "http://evil.example"}
+	if code, _ := send(t, ts, "POST", "/v1/repos", badOrigin, body); code != 403 {
+		t.Fatalf("foreign Origin: %d", code)
+	}
+}
+
+func TestSessionCookieWritesNeedOrigin(t *testing.T) {
+	srv, ts, repo := tcpServer(t)
+	body := `{"path":` + strconv.Quote(repo) + `}`
+	cookieOnly := map[string]string{"Cookie": ui.SessionCookie + "=" + srv.Token}
+	if code, b := send(t, ts, "POST", "/v1/repos", cookieOnly, body); code != 403 || !strings.Contains(b, "Origin") {
+		t.Fatalf("cookie POST without Origin must be refused: %d %s", code, b)
+	}
+	if code, _ := send(t, ts, "DELETE", "/v1/repos/x/boxes/y", cookieOnly, ""); code != 403 {
+		t.Fatalf("cookie DELETE without Origin: %d", code)
+	}
+	bearer := map[string]string{"Authorization": "Bearer " + srv.Token}
+	if code, _ := send(t, ts, "POST", "/v1/repos", bearer, body); code != 200 {
+		t.Fatalf("bearer POST without Origin must work: %d", code)
+	}
+}
+
+func TestDashboardMountAndRootRedirect(t *testing.T) {
+	_, ts, _ := tcpServer(t)
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := noRedirect.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 302 || resp.Header.Get("Location") != "/ui/" {
+		t.Fatalf("root: %d %q", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if code, body := send(t, ts, "GET", "/ui/", nil, ""); code != 200 || !strings.Contains(body, "root") {
+		t.Fatalf("dashboard without a cookie must still load: %d %s", code, body)
+	}
+}
+
+func TestBoxViewCarriesProxyURL(t *testing.T) {
+	srv, ts, repo := tcpServer(t)
+	bearer := map[string]string{"Authorization": "Bearer " + srv.Token}
+	send(t, ts, "POST", "/v1/boxes", bearer, `{"repo_path":`+strconv.Quote(repo)+`,"name":"a","no_dev":true}`)
+	_, port, _ := net.SplitHostPort(srv.APIAddr)
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		_, body := send(t, ts, "GET", "/v1/boxes", bearer, "")
+		var list []BoxView
+		json.Unmarshal([]byte(body), &list)
+		if len(list) == 1 && list[0].State == "ready" {
+			if list[0].URL != "http://a.localhost:"+port+"/" {
+				t.Fatalf("url = %q", list[0].URL)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("box never ready: %s", body)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+func TestDashboardRoutesEnforceOrigin(t *testing.T) {
+	_, ts, _ := tcpServer(t)
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	post := func(origin string) int {
+		req, _ := http.NewRequest("POST", ts.URL+"/ui/logout", nil)
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		resp, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if code := post("http://evil.example"); code != 403 {
+		t.Fatalf("cross-site logout: %d, want 403", code)
+	}
+	if code := post(ts.URL); code != 303 {
+		t.Fatalf("same-origin logout: %d, want 303", code)
+	}
+	if code := post(""); code != 303 {
+		t.Fatalf("no Origin (non-browser) logout: %d, want 303", code)
+	}
+	if code, _ := send(t, ts, "GET", "/ui/", map[string]string{"Origin": "http://evil.example"}, ""); code != 403 {
+		t.Fatalf("cross-origin GET /ui/: %d, want 403", code)
+	}
 }

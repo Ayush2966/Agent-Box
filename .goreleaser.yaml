@@ -1,4 +1,7 @@
 version: 2
+before:
+  hooks:
+    - sh -c "cd web && npm ci && npm run build"
 builds:
   - main: ./cmd/agentbox
     env: [CGO_ENABLED=0]

@@ -2,10 +2,14 @@ package daemon_test
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/agentbox-dev/agentbox/internal/box"
@@ -171,5 +175,105 @@ func TestRunExplainsAnOverlongSocketPath(t *testing.T) {
 	err := daemon.Run(context.Background(), daemon.PathsFor(home))
 	if err == nil || !strings.Contains(err.Error(), "too long") || !strings.Contains(err.Error(), "AGENTBOX_HOME") {
 		t.Fatalf("got %v, want an error naming the socket-path limit and AGENTBOX_HOME", err)
+	}
+}
+
+func TestDispatchRejectsForeignHosts(t *testing.T) {
+	hit := ""
+	px := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = "proxy" })
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hit = "app" })
+	h := daemon.Dispatch(px, app)
+	cases := map[string]string{
+		"a.localhost:7777": "proxy", "A.Repo-1a2b3c.LOCALHOST": "proxy",
+		"127.0.0.1:7777": "app", "localhost:7777": "app", "localhost": "app", "[::1]:7777": "app", "[::1]": "app",
+		"evil.example:7777": "", "evil.localhost.example:7777": "", "10.0.0.5:7777": "", "": "",
+	}
+	for host, want := range cases {
+		hit = ""
+		req := httptest.NewRequest("GET", "http://x/v1/health", nil)
+		req.Host = host
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if hit != want {
+			t.Errorf("Host %q: routed to %q, want %q", host, hit, want)
+		}
+		if want == "" && rec.Code != http.StatusMisdirectedRequest {
+			t.Errorf("Host %q: status %d, want 421", host, rec.Code)
+		}
+	}
+}
+
+func TestRunWritesEffectiveAPIAddrAndServesDashboard(t *testing.T) {
+	daemon.UIFS = fstest.MapFS{"index.html": {Data: []byte("<div id=\"root\"></div>")}}
+	t.Cleanup(func() { daemon.UIFS = nil })
+	p := daemon.PathsFor(tempHome(t))
+	os.WriteFile(p.Config, []byte("api_addr: 127.0.0.1:0\n"), 0o600)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go daemon.Run(ctx, p)
+	deadline := time.Now().Add(5 * time.Second)
+	for !daemon.Ping(p.Sock) {
+		if time.Now().After(deadline) {
+			t.Fatal("daemon never came up")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	raw, err := os.ReadFile(p.APIAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := strings.TrimSpace(string(raw))
+	if !strings.HasPrefix(addr, "127.0.0.1:") || strings.HasSuffix(addr, ":0") {
+		t.Fatalf("api_addr file: %q", addr)
+	}
+	tok, _ := os.ReadFile(p.Token)
+	get := func(host, path, bearer string) (int, string) {
+		req, _ := http.NewRequest("GET", "http://"+addr+path, nil)
+		if host != "" {
+			req.Host = host
+		}
+		if bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+	if code, body := get("", "/v1/health", strings.TrimSpace(string(tok))); code != 200 || !strings.Contains(body, `"api_addr":"`+addr+`"`) || !strings.Contains(body, `"ui":true`) {
+		t.Fatalf("health: %d %s", code, body)
+	}
+	if code, body := get("", "/ui/", ""); code != 200 || !strings.Contains(body, "root") {
+		t.Fatalf("dashboard: %d %s", code, body)
+	}
+	if code, _ := get("evil.example:7777", "/v1/health", strings.TrimSpace(string(tok))); code != 421 {
+		t.Fatalf("foreign host: %d", code)
+	}
+	if code, body := get("nope.localhost:7777", "/", ""); code != 404 || !strings.Contains(body, "no box called") {
+		t.Fatalf("proxy: %d %s", code, body)
+	}
+}
+
+func TestLoadSettingsRejectsNonLoopbackAPIAddr(t *testing.T) {
+	cases := []struct {
+		addr string
+		ok   bool
+	}{
+		{"127.0.0.1:7777", true}, {"localhost:7777", true}, {"[::1]:7777", true}, {"127.0.0.1:0", true},
+		{"0.0.0.0:7777", false}, {":7777", false}, {"10.0.0.5:7777", false}, {"example.com:7777", false}, {"nonsense", false},
+	}
+	for _, c := range cases {
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		os.WriteFile(path, []byte("api_addr: \""+c.addr+"\"\n"), 0o600)
+		_, err := daemon.LoadSettings(path)
+		if c.ok && err != nil {
+			t.Errorf("%s: unexpected error %v", c.addr, err)
+		}
+		if !c.ok && (err == nil || !strings.Contains(err.Error(), "loopback")) {
+			t.Errorf("%s: accepted or wrong error: %v", c.addr, err)
+		}
 	}
 }

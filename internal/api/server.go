@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"os"
 	"slices"
 	"strconv"
 	"time"
@@ -14,21 +16,28 @@ import (
 	"github.com/agentbox-dev/agentbox/internal/box"
 	"github.com/agentbox-dev/agentbox/internal/errs"
 	"github.com/agentbox-dev/agentbox/internal/events"
+	"github.com/agentbox-dev/agentbox/internal/ui"
 )
 
 type Server struct {
 	M       *box.Manager
 	Bus     *events.Bus
-	Token   string   // required on the TCP listener
-	Origins []string // browser origins allowed on the TCP listener
+	Token   string         // required on the TCP listener (Bearer header or session cookie)
+	Origins []string       // browser origins allowed on the TCP listener
+	Codes   *ui.LoginCodes // nil disables login codes
+	UI      http.Handler   // the dashboard; nil disables /ui/
+	APIAddr string         // effective TCP address, "" when the HTTP API is disabled
+	Version string
+	UIBuilt bool
 }
 
-// Handler serves the v1 API. requireToken is true for the TCP listener and
-// false for the Unix socket, which file permissions already protect.
+// Handler serves the v1 API. requireToken is true for the TCP listener, which
+// also gets the dashboard, and false for the Unix socket, which file
+// permissions already protect and which serves the API alone.
 func (s *Server) Handler(requireToken bool) http.Handler {
 	mux := http.NewServeMux()
 	const b = "/v1/repos/{repo}/boxes/{name}"
-	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, map[string]bool{"ok": true}) })
+	mux.HandleFunc("GET /v1/health", s.health)
 	mux.HandleFunc("GET /v1/repos", s.listRepos)
 	mux.HandleFunc("POST /v1/repos", s.resolveRepo)
 	mux.HandleFunc("GET /v1/boxes", s.listBoxes)
@@ -44,26 +53,84 @@ func (s *Server) Handler(requireToken bool) http.Handler {
 	mux.HandleFunc("GET /v1/repos/{repo}/doctor", s.doctor(false))
 	mux.HandleFunc("POST /v1/repos/{repo}/doctor", s.doctor(true))
 	mux.HandleFunc("GET /v1/events", s.events)
+	mux.HandleFunc("POST /v1/ui/login-codes", s.loginCode)
 	if !requireToken {
 		return mux
 	}
-	return s.auth(mux)
+	root := http.NewServeMux()
+	root.Handle("/v1/", s.auth(mux))
+	if s.UI != nil {
+		root.Handle("/ui/", s.UI)
+		root.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, "/ui/", http.StatusFound)
+		})
+	}
+	return s.checkOrigin(root)
 }
 
-func (s *Server) auth(next http.Handler) http.Handler {
-	want := []byte("Bearer " + s.Token)
+// checkOrigin enforces spec §6.3 rule 3 on every TCP request: a browser that
+// names a foreign origin is refused before anything else happens, dashboard
+// pages included.
+func (s *Server) checkOrigin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if o := r.Header.Get("Origin"); o != "" && !slices.Contains(s.Origins, o) {
 			writeJSON(w, http.StatusForbidden, ErrorBody{errs.New(errs.Invalid, "origin %q is not allowed", o)})
 			return
 		}
-		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) != 1 {
-			writeJSON(w, http.StatusUnauthorized, ErrorBody{errs.New(errs.Invalid, "missing or wrong API token").
-				WithHint("send `Authorization: Bearer <token>` using the token in ~/.agentbox/token")})
+		next.ServeHTTP(w, r)
+	})
+}
+
+// auth admits a Bearer token, or a browser session cookie. A cookie may only
+// change state from the dashboard's own origin: browsers send Origin on every
+// cross-origin request and on same-origin fetch POSTs, and Sec-Fetch-Site
+// names a cross-site caller even when Origin looks right.
+func (s *Server) auth(next http.Handler) http.Handler {
+	want := []byte("Bearer " + s.Token)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		if subtle.ConstantTimeCompare([]byte(r.Header.Get("Authorization")), want) == 1 {
+			next.ServeHTTP(w, r)
 			return
+		}
+		if !ui.ValidSession(r, s.Token) {
+			writeJSON(w, http.StatusUnauthorized, ErrorBody{errs.New(errs.Invalid, "missing or wrong API token").
+				WithHint("send `Authorization: Bearer <token>` using the token in ~/.agentbox/token, or sign in with `agentbox ui`")})
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			if origin == "" || r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+				writeJSON(w, http.StatusForbidden, ErrorBody{errs.New(errs.Invalid, "a browser session must send an allowed Origin header to change state")})
+				return
+			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) health(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, HealthView{OK: true, PID: os.Getpid(), Version: s.Version, APIAddr: s.APIAddr, UI: s.UIBuilt})
+}
+
+func (s *Server) loginCode(w http.ResponseWriter, r *http.Request) {
+	if s.Codes == nil || s.APIAddr == "" {
+		writeError(w, errs.New(errs.Precondition, "the daemon's HTTP API is disabled, so the dashboard cannot be opened").
+			WithHint("the port in api_addr (~/.agentbox/config.yaml, default 127.0.0.1:7777) is probably in use; see ~/.agentbox/agentbox.log"))
+		return
+	}
+	code, exp := s.Codes.Mint()
+	writeJSON(w, http.StatusCreated, LoginCode{Code: code, URL: "http://" + s.APIAddr + "/ui/login?code=" + code, ExpiresAt: exp})
+}
+
+// view adds what only the server knows to a box: its proxy URL.
+func (s *Server) view(i box.Info) BoxView {
+	v := viewOf(i)
+	if len(i.Ports) > 0 && s.APIAddr != "" {
+		if _, port, err := net.SplitHostPort(s.APIAddr); err == nil {
+			v.URL = "http://" + i.Name + ".localhost:" + port + "/"
+		}
+	}
+	return v
 }
 
 func (s *Server) listRepos(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +169,7 @@ func (s *Server) listBoxes(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]BoxView, 0, len(infos))
 	for _, i := range infos {
-		out = append(out, viewOf(i))
+		out = append(out, s.view(i))
 	}
 	writeJSON(w, 200, out)
 }
@@ -135,7 +202,7 @@ func (s *Server) getBox(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	writeJSON(w, 200, viewOf(info))
+	writeJSON(w, 200, s.view(info))
 }
 
 func (s *Server) startBox(w http.ResponseWriter, r *http.Request) {
@@ -351,6 +418,7 @@ func noContent(w http.ResponseWriter, err error) {
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }

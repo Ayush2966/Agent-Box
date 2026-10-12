@@ -8,6 +8,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -45,6 +47,7 @@ func TestMain(m *testing.M) {
 
 type env struct {
 	t    *testing.T
+	home string
 	vars []string
 }
 
@@ -58,7 +61,7 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	os.WriteFile(filepath.Join(home, "config.yaml"), []byte("api_addr: 127.0.0.1:0\n"), 0o600)
-	e := &env{t: t, vars: append(os.Environ(), "AGENTBOX_HOME="+home)}
+	e := &env{t: t, home: home, vars: append(os.Environ(), "AGENTBOX_HOME="+home)}
 	t.Cleanup(func() {
 		stop := exec.Command(bin, "daemon", "stop")
 		stop.Env = e.vars
@@ -192,4 +195,115 @@ func TestThreeBoxesPostgres(t *testing.T) {
 			t.Errorf("box %s got database %v, want %s", b.Name, resp["db"], want)
 		}
 	})
+}
+
+// runErr is run without the fatal: it returns combined output and the error.
+func (e *env) runErr(dir string, args ...string) (string, error) {
+	cmd := exec.Command(bin, args...)
+	cmd.Dir, cmd.Env = dir, e.vars
+	out, err := cmd.CombinedOutput()
+	return string(out), err
+}
+
+func TestProxyAndDashboard(t *testing.T) {
+	e := newEnv(t)
+	repo := copyExample(t, "sqlite")
+	c, err := sql.Open("sqlite", filepath.Join(repo, "dev.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Exec(`CREATE TABLE items(name TEXT)`); err != nil {
+		t.Fatal(err)
+	}
+	c.Close()
+	e.run(repo, "new", "a")
+	t.Cleanup(func() { e.run(repo, "rm", "--force", "a") })
+
+	raw, err := os.ReadFile(filepath.Join(e.home, "api_addr"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := strings.TrimSpace(string(raw))
+	viaProxy := func(host string) (int, string) {
+		t.Helper()
+		req, _ := http.NewRequest("GET", "http://"+addr+"/", nil)
+		req.Host = host
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		code, body := viaProxy("a.localhost")
+		if code == 200 && strings.Contains(body, `"box":"a"`) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("proxy never served box a: %d %s", code, body)
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	e.run(repo, "stop", "a")
+	if code, body := viaProxy("a.localhost"); code != 503 || !strings.Contains(body, "stopped") || !strings.Contains(body, "agentbox start a") {
+		t.Fatalf("stopped box via proxy: %d %s", code, body)
+	}
+	if code, _ := viaProxy("nope.localhost"); code != 404 {
+		t.Fatalf("unknown box via proxy: %d", code)
+	}
+
+	out, err := e.runErr(repo, "ui", "--no-open")
+	if err != nil && strings.Contains(out, "built without the dashboard") {
+		t.Skip("dashboard not built into this binary (run `make ui` first)")
+	}
+	if err != nil || !strings.HasPrefix(out, "dashboard: ") {
+		t.Fatalf("ui --no-open: %v\n%s", err, out)
+	}
+	link := strings.TrimSpace(strings.TrimPrefix(out, "dashboard: "))
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := noRedirect.Get(link)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	var session *http.Cookie
+	for _, ck := range resp.Cookies() {
+		if ck.Name == "agentbox_session" {
+			session = ck
+		}
+	}
+	if resp.StatusCode != 303 || session == nil {
+		t.Fatalf("login link: %d, cookie %v", resp.StatusCode, session)
+	}
+	base := "http://" + addr
+	req, _ := http.NewRequest("GET", base+"/v1/boxes", nil)
+	req.AddCookie(session)
+	resp2, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var boxes []api.BoxView
+	json.NewDecoder(resp2.Body).Decode(&boxes)
+	resp2.Body.Close()
+	_, port, _ := net.SplitHostPort(addr)
+	if resp2.StatusCode != 200 || len(boxes) != 1 || boxes[0].URL != "http://a.localhost:"+port+"/" {
+		t.Fatalf("boxes with cookie: %d %+v", resp2.StatusCode, boxes)
+	}
+	start, _ := http.NewRequest("POST", base+"/v1/repos/"+boxes[0].Repo+"/boxes/a/start", nil)
+	start.AddCookie(session)
+	start.Header.Set("Origin", base)
+	resp3, err := http.DefaultClient.Do(start)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp3.Body.Close()
+	if resp3.StatusCode != 204 {
+		t.Fatalf("start with cookie+Origin: %d", resp3.StatusCode)
+	}
+	if code, body := viaProxy("a.localhost"); code != 200 && code != 502 {
+		t.Fatalf("after start: %d %s", code, body)
+	}
 }

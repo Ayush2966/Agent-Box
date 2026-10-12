@@ -21,6 +21,7 @@ type Config struct {
 	Setup   string   `yaml:"setup"`
 	Dev     string   `yaml:"dev"`
 	Ports   []string `yaml:"ports"`
+	Proxy   string   `yaml:"proxy"`
 	DB      *DB      `yaml:"db"`
 	Env     Env      `yaml:"env"`
 	Copy    []string `yaml:"copy"`
@@ -35,6 +36,18 @@ type DB struct {
 // Path returns a SQLite source as a clean relative file path, without any "file:" prefix.
 func (d *DB) Path() string { return filepath.Clean(strings.TrimPrefix(d.Source, "file:")) }
 
+// ProxyPort names the port env var that http://<box>.localhost forwards to:
+// `proxy` when set, else the first entry of `ports`, else "" (no ports).
+func (c *Config) ProxyPort() string {
+	if c.Proxy != "" {
+		return c.Proxy
+	}
+	if len(c.Ports) > 0 {
+		return c.Ports[0]
+	}
+	return ""
+}
+
 type Env struct {
 	Template string            `yaml:"template"`
 	File     string            `yaml:"file"`
@@ -44,7 +57,7 @@ type Env struct {
 var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 var knownKeys = map[string][]string{
-	"":    {"version", "setup", "dev", "ports", "db", "env", "copy"},
+	"":    {"version", "setup", "dev", "ports", "proxy", "db", "env", "copy"},
 	"db":  {"driver", "url_env", "source"},
 	"env": {"template", "file", "set"},
 }
@@ -130,6 +143,9 @@ func (c *Config) validate() error {
 			return fmt.Errorf("%s: ports: %q listed twice", FileName, p)
 		}
 		seen[p] = true
+	}
+	if c.Proxy != "" && !seen[c.Proxy] {
+		return fmt.Errorf("%s: proxy: %q is not listed in ports", FileName, c.Proxy)
 	}
 	if c.DB != nil {
 		switch c.DB.Driver {

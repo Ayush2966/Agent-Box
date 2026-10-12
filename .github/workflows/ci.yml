@@ -12,10 +12,21 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version: '1.24' }
       - uses: actions/setup-node@v4
-        with: { node-version: '22' }
+        with: { node-version: '22', cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: cd web && npm ci && npm run check && npm run build
       - run: go vet ./...
       - run: go test -race ./...
       - run: go test -tags e2e ./e2e/...
+
+  # The Go side must build and pass without a dashboard build present.
+  go-without-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24' }
+      - run: test ! -f internal/ui/dist/index.html
+      - run: go vet ./... && go test -race ./... && CGO_ENABLED=0 go build ./cmd/agentbox
 
   postgres:
     runs-on: ubuntu-latest
