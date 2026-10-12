@@ -252,7 +252,7 @@ func TestPostgresPrepareRebuildsHalfBuiltTemplate(t *testing.T) {
 
 func TestDumpRestoreErrorReportsTheRealCause(t *testing.T) {
 	dErr, rErr := errors.New("signal: broken pipe"), errors.New("exit status 1")
-	err := dumpRestoreError(dErr, "", rErr, "pg_restore: error: could not execute query: permission denied")
+	err := dumpRestoreError("pg_dump", dErr, "", "pg_restore", rErr, "pg_restore: error: could not execute query: permission denied")
 	if err == nil {
 		t.Fatal("no error")
 	}
@@ -260,13 +260,13 @@ func TestDumpRestoreErrorReportsTheRealCause(t *testing.T) {
 	if !strings.HasPrefix(s, "pg_restore failed") || !strings.Contains(s, "permission denied") || !strings.Contains(s, "broken pipe") {
 		t.Fatalf("both tools failed: got %q, want pg_restore first with both causes", s)
 	}
-	if err := dumpRestoreError(dErr, "pg_dump: error: connection failed", nil, ""); err == nil || !strings.HasPrefix(err.Error(), "pg_dump failed") || !strings.Contains(err.Error(), "connection failed") {
+	if err := dumpRestoreError("pg_dump", dErr, "pg_dump: error: connection failed", "pg_restore", nil, ""); err == nil || !strings.HasPrefix(err.Error(), "pg_dump failed") || !strings.Contains(err.Error(), "connection failed") {
 		t.Fatalf("dump only: got %v", err)
 	}
-	if err := dumpRestoreError(nil, "", rErr, "bad archive"); err == nil || !strings.HasPrefix(err.Error(), "pg_restore failed") {
+	if err := dumpRestoreError("pg_dump", nil, "", "pg_restore", rErr, "bad archive"); err == nil || !strings.HasPrefix(err.Error(), "pg_restore failed") {
 		t.Fatalf("restore only: got %v", err)
 	}
-	if err := dumpRestoreError(nil, "", nil, ""); err != nil {
+	if err := dumpRestoreError("pg_dump", nil, "", "pg_restore", nil, ""); err != nil {
 		t.Fatalf("no failure: got %v", err)
 	}
 }

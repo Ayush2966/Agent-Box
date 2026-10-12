@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/agentbox-dev/agentbox/internal/compose"
 	"github.com/agentbox-dev/agentbox/internal/config"
 	"github.com/agentbox-dev/agentbox/internal/errs"
 	"github.com/agentbox-dev/agentbox/internal/events"
@@ -99,8 +100,24 @@ func (m *Manager) Start(ctx context.Context, repoID, name string) error {
 	if err != nil {
 		return errs.New(errs.Invalid, "%v", err)
 	}
-	if cfg.Dev == "" {
+	if cfg.Dev == "" && cfg.Compose == nil {
 		return errs.New(errs.Precondition, "no dev command in %s", config.FileName).WithHint("add a `dev:` line")
+	}
+	if cfg.Compose != nil {
+		st, err := m.stack(cfg, b)
+		if err != nil {
+			return errs.From(err).WithStep(StepCompose)
+		}
+		if b.Compose != st.Project {
+			b.Compose = st.Project
+			_ = m.d.Store.UpdateBox(b)
+		}
+		if err := st.Up(ctx); err != nil {
+			return errs.From(err).WithStep(StepCompose)
+		}
+	}
+	if cfg.Dev == "" {
+		return nil // stack only
 	}
 	p, err := m.startProc(b, cfg)
 	if err != nil {
@@ -119,8 +136,12 @@ func (m *Manager) Stop(ctx context.Context, repoID, name string) error {
 		return err
 	}
 	m.stopProc(b.ID())
+	var stackErr error
+	if b.Compose != "" {
+		stackErr = compose.StopProject(ctx, m.d.Compose, b.Compose, m.stackLog(b))
+	}
 	if b.State != state.Running {
-		return nil
+		return stackErr
 	}
 	b, err = m.get(repoID, name) // the process may have updated the row while stopping
 	if err != nil {
@@ -131,7 +152,7 @@ func (m *Manager) Stop(ctx context.Context, repoID, name string) error {
 		return err
 	}
 	m.publish(events.BoxState, b, nil)
-	return nil
+	return stackErr
 }
 
 // Merge merges the box branch into the main checkout's current branch. It never

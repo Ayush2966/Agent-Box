@@ -4,11 +4,13 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -24,6 +26,7 @@ type Config struct {
 	Proxy   string   `yaml:"proxy"`
 	DB      *DB      `yaml:"db"`
 	Env     Env      `yaml:"env"`
+	Compose *Compose `yaml:"compose"`
 	Copy    []string `yaml:"copy"`
 }
 
@@ -54,12 +57,31 @@ type Env struct {
 	Set      map[string]string `yaml:"set"`
 }
 
+// Compose describes the per-box Docker Compose stack.
+type Compose struct {
+	File     string   `yaml:"file"`     // repo-relative; "" = the first of compose.yaml, compose.yml, docker-compose.yml, docker-compose.yaml
+	Services []string `yaml:"services"` // subset to bring up; empty = all
+	Wait     string   `yaml:"wait"`     // `up --wait` timeout; "" = 60s
+}
+
+// WaitTimeout is how long `up --wait` may take before the step fails.
+func (c *Compose) WaitTimeout() time.Duration {
+	if c.Wait == "" {
+		return 60 * time.Second
+	}
+	d, _ := time.ParseDuration(c.Wait) // validated in validate()
+	return d
+}
+
+var serviceName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
+
 var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 var knownKeys = map[string][]string{
-	"":    {"version", "setup", "dev", "ports", "proxy", "db", "env", "copy"},
-	"db":  {"driver", "url_env", "source"},
-	"env": {"template", "file", "set"},
+	"":        {"version", "setup", "dev", "ports", "proxy", "db", "env", "compose", "copy"},
+	"db":      {"driver", "url_env", "source"},
+	"env":     {"template", "file", "set"},
+	"compose": {"file", "services", "wait"},
 }
 
 // Load reads and validates <repoRoot>/agentbox.yaml.
@@ -121,7 +143,7 @@ func checkKeys(n *yaml.Node, section string) error {
 			}
 			return errors.New(msg)
 		}
-		if section == "" && (key.Value == "db" || key.Value == "env") {
+		if section == "" && (key.Value == "db" || key.Value == "env" || key.Value == "compose") {
 			if err := checkKeys(n.Content[i+1], key.Value); err != nil {
 				return err
 			}
@@ -149,9 +171,9 @@ func (c *Config) validate() error {
 	}
 	if c.DB != nil {
 		switch c.DB.Driver {
-		case "postgres", "sqlite":
+		case "postgres", "sqlite", "mysql":
 		default:
-			return fmt.Errorf(`%s: db.driver must be "postgres" or "sqlite" (got %q)`, FileName, c.DB.Driver)
+			return fmt.Errorf(`%s: db.driver must be "postgres", "mysql" or "sqlite" (got %q)`, FileName, c.DB.Driver)
 		}
 		if !envName.MatchString(c.DB.URLEnv) {
 			return fmt.Errorf("%s: db.url_env must be a valid env var name (got %q)", FileName, c.DB.URLEnv)
@@ -167,6 +189,12 @@ func (c *Config) validate() error {
 				return err
 			}
 		}
+		if c.DB.Driver == "mysql" {
+			u, err := url.Parse(c.DB.Source)
+			if err != nil || (u.Scheme != "mysql" && u.Scheme != "mariadb") || u.Host == "" || len(strings.Trim(u.Path, "/")) == 0 {
+				return fmt.Errorf("%s: db.source for mysql must look like mysql://user:pass@host:3306/database (got %q)", FileName, c.DB.Source)
+			}
+		}
 	}
 	for k := range c.Env.Set {
 		if !envName.MatchString(k) {
@@ -180,6 +208,24 @@ func (c *Config) validate() error {
 	}
 	if err := localPath("env.file", c.Env.File); err != nil {
 		return err
+	}
+	if c.Compose != nil {
+		if c.Compose.File != "" {
+			if err := localPath("compose.file", c.Compose.File); err != nil {
+				return err
+			}
+		}
+		for _, s := range c.Compose.Services {
+			if !serviceName.MatchString(s) {
+				return fmt.Errorf("%s: compose.services: %q is not a valid service name", FileName, s)
+			}
+		}
+		if c.Compose.Wait != "" {
+			d, err := time.ParseDuration(c.Compose.Wait)
+			if err != nil || d < time.Second {
+				return fmt.Errorf("%s: compose.wait must be a duration of at least 1s (got %q)", FileName, c.Compose.Wait)
+			}
+		}
 	}
 	for i, p := range c.Copy {
 		if err := localPath(fmt.Sprintf("copy[%d]", i), p); err != nil {

@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/agentbox-dev/agentbox/internal/compose"
 	"github.com/agentbox-dev/agentbox/internal/config"
 	"github.com/agentbox-dev/agentbox/internal/db"
 	"github.com/agentbox-dev/agentbox/internal/envfile"
@@ -37,6 +38,7 @@ const (
 	StepPorts    = "ports"
 	StepDB       = "db"
 	StepEnv      = "env"
+	StepCompose  = "compose"
 	StepSetup    = "setup"
 	StepDev      = "dev"
 )
@@ -51,6 +53,7 @@ type Deps struct {
 	NewDriver   func(cfg *config.DB, repoRoot string, opts db.Options) (db.Driver, error)
 	Bus         *events.Bus
 	ProcOptions proc.Options
+	Compose     compose.Executor // docker; nil = the real CLI
 }
 
 // Manager owns every box on the machine. Methods are safe for concurrent use;
@@ -70,6 +73,9 @@ func NewManager(d Deps) *Manager {
 	}
 	if d.NewDriver == nil {
 		d.NewDriver = db.New
+	}
+	if d.Compose == nil {
+		d.Compose = compose.Docker{}
 	}
 	if d.Bus == nil {
 		d.Bus = events.NewBus()
@@ -301,6 +307,28 @@ func (m *Manager) Build(ctx context.Context, b state.Box, cfg *config.Config, op
 		return fail(StepEnv, err)
 	}
 
+	if cfg.Compose != nil {
+		begin(StepCompose)
+		if err := compose.Check(ctx, m.d.Compose); err != nil {
+			return fail(StepCompose, err)
+		}
+		st, err := m.stack(cfg, b)
+		if err != nil {
+			return fail(StepCompose, err)
+		}
+		b.Compose = st.Project
+		if err := m.d.Store.UpdateBox(b); err != nil {
+			return fail(StepCompose, err)
+		}
+		undo.push(func() error { return compose.DownProject(context.Background(), m.d.Compose, st.Project, m.stackLog(b)) })
+		if err := st.Up(ctx); err != nil {
+			return fail(StepCompose, err)
+		}
+		if err := hook(StepCompose); err != nil {
+			return fail(StepCompose, err)
+		}
+	}
+
 	if cfg.Setup != "" {
 		begin(StepSetup)
 		logw, err := m.openLog(b)
@@ -368,6 +396,11 @@ func (m *Manager) Remove(ctx context.Context, repoID, name string, opts RemoveOp
 	var problems []string
 	note := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
 	m.stopProc(b.ID())
+	if b.Compose != "" {
+		if err := compose.DownProject(ctx, m.d.Compose, b.Compose, m.stackLog(b)); err != nil {
+			note("compose project %s was not removed: %v", b.Compose, err)
+		}
+	}
 	if b.DBName != "" && !dbLivesInBox(b) {
 		if cfgErr != nil || cfg.DB == nil {
 			note("database %s was not dropped: agentbox.yaml no longer configures a db", b.DBName)
@@ -527,6 +560,33 @@ func (m *Manager) closeLog(b state.Box, remove bool) {
 	}
 }
 
+// stack builds the box's Compose project. The compose file is read from the
+// box worktree, so the box runs the version of the file it checked out.
+func (m *Manager) stack(cfg *config.Config, b state.Box) (*compose.Stack, error) {
+	file, err := compose.ResolveFile(b.Dir, cfg.Compose.File)
+	if err != nil {
+		return nil, err
+	}
+	logw, err := m.openLog(b)
+	if err != nil {
+		return nil, err
+	}
+	return &compose.Stack{
+		Project: compose.ProjectName(b.RepoID, b.Name), Dir: b.Dir, File: file, EnvFile: cfg.Env.File,
+		Services: cfg.Compose.Services, Wait: cfg.Compose.WaitTimeout(), Env: processEnv(envVars(cfg, b)),
+		Exec: m.d.Compose, Log: logw,
+	}, nil
+}
+
+// stackLog is where by-name stack commands (stop/down) write; it tolerates a
+// box whose log can no longer be opened.
+func (m *Manager) stackLog(b state.Box) io.Writer {
+	if logw, err := m.openLog(b); err == nil {
+		return logw
+	}
+	return io.Discard
+}
+
 func (m *Manager) startProc(b state.Box, cfg *config.Config) (*proc.Proc, error) {
 	m.stopProc(b.ID())
 	logw, err := m.openLog(b)
@@ -616,7 +676,11 @@ func envVars(cfg *config.Config, b state.Box) []envfile.KV {
 	if cfg.DB != nil && b.DBURL != "" {
 		kv = append(kv, envfile.KV{Key: cfg.DB.URLEnv, Value: b.DBURL})
 	}
-	return append(kv, envfile.KV{Key: "AGENTBOX_NAME", Value: b.Name}, envfile.KV{Key: "AGENTBOX_ROOT", Value: b.Dir})
+	kv = append(kv, envfile.KV{Key: "AGENTBOX_NAME", Value: b.Name}, envfile.KV{Key: "AGENTBOX_ROOT", Value: b.Dir})
+	if cfg.Compose != nil {
+		kv = append(kv, envfile.KV{Key: "COMPOSE_PROJECT_NAME", Value: compose.ProjectName(b.RepoID, b.Name)})
+	}
+	return kv
 }
 
 func processEnv(vars []envfile.KV) []string {

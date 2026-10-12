@@ -161,3 +161,23 @@ func TestDeleteBoxFreesPorts(t *testing.T) {
 		t.Fatalf("ports left: %v", rows)
 	}
 }
+
+func TestBoxComposeRoundTrips(t *testing.T) {
+	s := openTest(t) // whatever helper the file uses to open a temp store
+	r, _ := s.UpsertRepo("/tmp/r")
+	b := Box{RepoID: r.ID, Name: "a", Dir: "/tmp/boxes/a", Branch: "agentbox/a", State: Ready, Compose: "agentbox-" + r.ID + "-a"}
+	if err := s.InsertBox(b); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetBox(r.ID, "a")
+	if err != nil || got.Compose != b.Compose {
+		t.Fatalf("%+v %v", got, err)
+	}
+	got.Compose = ""
+	if err := s.UpdateBox(got); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.GetBox(r.ID, "a"); again.Compose != "" {
+		t.Fatalf("UpdateBox did not clear Compose: %+v", again)
+	}
+}

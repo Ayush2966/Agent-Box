@@ -3,6 +3,7 @@ package config
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseValid(t *testing.T) {
@@ -96,5 +97,53 @@ func TestProxyKey(t *testing.T) {
 	_, err = Parse([]byte("version: 1\nports: [APP_PORT]\nproxi: APP_PORT\n"))
 	if err == nil || !strings.Contains(err.Error(), `did you mean "proxy"`) {
 		t.Fatalf("typo suggestion: %v", err)
+	}
+}
+
+func TestComposeKeys(t *testing.T) {
+	c, err := Parse([]byte("version: 1\nports: [APP_PORT, REDIS_PORT]\ncompose:\n  file: deploy/compose.yaml\n  services: [redis, db]\n  wait: 90s\n"))
+	if err != nil || c.Compose == nil || c.Compose.File != "deploy/compose.yaml" || len(c.Compose.Services) != 2 || c.Compose.WaitTimeout() != 90*time.Second {
+		t.Fatalf("%+v %v", c.Compose, err)
+	}
+	c, err = Parse([]byte("version: 1\ncompose: {}\n"))
+	if err != nil || c.Compose == nil || c.Compose.File != "" || c.Compose.WaitTimeout() != 60*time.Second {
+		t.Fatalf("defaults: %+v %v", c.Compose, err)
+	}
+	for _, bad := range []string{
+		"version: 1\ncompose:\n  file: ../x/compose.yaml\n",
+		"version: 1\ncompose:\n  services: ['bad name']\n",
+		"version: 1\ncompose:\n  wait: 500ms\n",
+		"version: 1\ncompose:\n  wait: soon\n",
+		"version: 1\ncompose:\n  servcies: [redis]\n",
+	} {
+		if _, err := Parse([]byte(bad)); err == nil {
+			t.Errorf("accepted %q", bad)
+		}
+	}
+	if _, err := Parse([]byte("version: 1\ncompose:\n  servcies: [redis]\n")); err == nil || !strings.Contains(err.Error(), `did you mean "services"`) {
+		t.Fatalf("typo suggestion: %v", err)
+	}
+}
+
+func TestMySQLDriverConfig(t *testing.T) {
+	c, err := Parse([]byte("version: 1\ndb:\n  driver: mysql\n  url_env: DATABASE_URL\n  source: mysql://app:secret@127.0.0.1:3306/myapp\n"))
+	if err != nil || c.DB.Driver != "mysql" {
+		t.Fatalf("%+v %v", c.DB, err)
+	}
+	if _, err := Parse([]byte("version: 1\ndb:\n  driver: mysql\n  url_env: DATABASE_URL\n  source: mariadb://app@db/myapp\n")); err != nil {
+		t.Fatalf("mariadb scheme: %v", err)
+	}
+	for _, bad := range []string{
+		"mysql://app@127.0.0.1:3306/",         // no database
+		"mysql:///myapp",                      // no host
+		"postgres://app@127.0.0.1:5432/myapp", // wrong scheme
+		"127.0.0.1:3306/myapp",                // not a URL
+	} {
+		if _, err := Parse([]byte("version: 1\ndb:\n  driver: mysql\n  url_env: DATABASE_URL\n  source: " + bad + "\n")); err == nil || !strings.Contains(err.Error(), "db.source") {
+			t.Errorf("accepted %q (%v)", bad, err)
+		}
+	}
+	if _, err := Parse([]byte("version: 1\ndb:\n  driver: oracle\n  url_env: X\n  source: y\n")); err == nil || !strings.Contains(err.Error(), `"mysql"`) {
+		t.Fatalf("driver list in the error: %v", err)
 	}
 }

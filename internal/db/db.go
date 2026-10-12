@@ -40,6 +40,8 @@ func New(cfg *config.DB, repoRoot string, opts Options) (Driver, error) {
 		return &SQLite{Root: repoRoot, Rel: cfg.Path(), Source: cfg.Source}, nil
 	case "postgres":
 		return NewPostgres(cfg.Source, opts)
+	case "mysql":
+		return NewMySQL(cfg.Source)
 	}
 	return nil, fmt.Errorf("unknown db driver %q", cfg.Driver)
 }

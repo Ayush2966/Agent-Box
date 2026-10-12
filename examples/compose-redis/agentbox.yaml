@@ -1,0 +1,7 @@
+version: 1
+dev: node server.js
+ports: [APP_PORT, REDIS_PORT]
+compose:
+  services: [redis]      # compose.yaml next to this file; each box gets its own project
+env:
+  template: .env.example

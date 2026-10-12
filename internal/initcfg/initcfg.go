@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/agentbox-dev/agentbox/internal/compose"
 	"github.com/agentbox-dev/agentbox/internal/envfile"
 )
 
@@ -19,9 +20,10 @@ type Result struct {
 }
 
 var (
-	portKey  = regexp.MustCompile(`(^|_)PORT$`)
-	dbKey    = regexp.MustCompile(`^(DATABASE_URL|DB_URL|POSTGRES_URL|DATABASE_PATH|SQLITE_PATH)$`)
-	hardPort = regexp.MustCompile(`(--port[ =]|-p ?|PORT=)\d{2,5}`)
+	portKey       = regexp.MustCompile(`(^|_)PORT$`)
+	dbKey         = regexp.MustCompile(`^(DATABASE_URL|DB_URL|POSTGRES_URL|DATABASE_PATH|SQLITE_PATH)$`)
+	fixedHostPort = regexp.MustCompile(`"?\b(\d{2,5}):(\d{2,5})\b"?`)
+	hardPort      = regexp.MustCompile(`(--port[ =]|-p ?|PORT=)\d{2,5}`)
 )
 
 func exists(root, name string) bool {
@@ -47,6 +49,8 @@ func driverOf(v string) string {
 	switch {
 	case strings.HasPrefix(v, "postgres://"), strings.HasPrefix(v, "postgresql://"):
 		return "postgres"
+	case strings.HasPrefix(v, "mysql://"), strings.HasPrefix(v, "mariadb://"):
+		return "mysql"
 	case strings.HasPrefix(v, "file:"), strings.HasSuffix(v, ".db"), strings.HasSuffix(v, ".sqlite"), strings.HasSuffix(v, ".sqlite3"):
 		return "sqlite"
 	}
@@ -143,6 +147,19 @@ func Detect(root string) (Result, error) {
 		}
 	} else {
 		b.WriteString("ports: []  # env var names that get a free port per box, e.g. [PORT]\n")
+	}
+	for _, name := range compose.DefaultFiles {
+		if !exists(root, name) {
+			continue
+		}
+		fmt.Fprintf(&b, "compose:\n  file: %s\n", name)
+		if data, err := os.ReadFile(filepath.Join(root, name)); err == nil {
+			if m := fixedHostPort.FindString(string(data)); m != "" {
+				r.Warnings = append(r.Warnings, fmt.Sprintf(
+					"%s publishes a fixed host port (%s); write it as \"${VAR}:containerPort\" and list VAR under ports so boxes don't collide", name, m))
+			}
+		}
+		break
 	}
 	switch {
 	case driver != "" && source != "":

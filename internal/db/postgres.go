@@ -229,19 +229,19 @@ func (p *Postgres) dumpRestore(ctx context.Context, target string) error {
 	w.Close()
 	rErr := restore.Wait()
 	dErr := dump.Wait()
-	return dumpRestoreError(dErr, dumpErr.String(), rErr, restoreErr.String())
+	return dumpRestoreError("pg_dump", dErr, dumpErr.String(), "pg_restore", rErr, restoreErr.String())
 }
 
 // dumpRestoreError names the tool that actually failed. When pg_restore dies,
 // pg_dump dies too, of a broken pipe, so the restore error is reported first
 // and the dump error is kept as context rather than replacing the real cause.
-func dumpRestoreError(dErr error, dumpMsg string, rErr error, restoreMsg string) error {
+func dumpRestoreError(dumpTool string, dErr error, dumpMsg string, restoreTool string, rErr error, restoreMsg string) error {
 	var parts []string
 	if rErr != nil {
-		parts = append(parts, fmt.Sprintf("pg_restore failed: %v: %s", rErr, strings.TrimSpace(restoreMsg)))
+		parts = append(parts, fmt.Sprintf("%s failed: %v: %s", restoreTool, rErr, strings.TrimSpace(restoreMsg)))
 	}
 	if dErr != nil {
-		parts = append(parts, fmt.Sprintf("pg_dump failed: %v: %s", dErr, strings.TrimSpace(dumpMsg)))
+		parts = append(parts, fmt.Sprintf("%s failed: %v: %s", dumpTool, dErr, strings.TrimSpace(dumpMsg)))
 	}
 	if len(parts) == 0 {
 		return nil

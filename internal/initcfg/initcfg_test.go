@@ -135,3 +135,40 @@ func TestDetectHintsProxyWhenSeveralPorts(t *testing.T) {
 		t.Fatalf("proxy hint with one port:\n%s", res.YAML)
 	}
 }
+
+func TestDetectMySQL(t *testing.T) {
+	_, cfg := detect(t, map[string]string{
+		"package.json": `{"scripts": {"dev": "node server.js"}}`,
+		".env.example": "PORT=3000\nDATABASE_URL=mysql://app:secret@127.0.0.1:3306/app\n",
+	})
+	if cfg.DB == nil || cfg.DB.Driver != "mysql" || cfg.DB.Source != "mysql://app:secret@127.0.0.1:3306/app" {
+		t.Fatalf("db = %+v", cfg.DB)
+	}
+}
+
+func TestDetectComposeFile(t *testing.T) {
+	res, cfg := detect(t, map[string]string{
+		"package.json": `{"scripts": {"dev": "node server.js"}}`,
+		".env.example": "PORT=3000\n",
+		"compose.yaml": "services:\n  redis:\n    image: redis:7\n    ports: [\"6379:6379\"]\n",
+	})
+	if cfg.Compose == nil || cfg.Compose.File != "compose.yaml" {
+		t.Fatalf("compose = %+v\n%s", cfg.Compose, res.YAML)
+	}
+	if len(res.Warnings) == 0 || !strings.Contains(strings.Join(res.Warnings, "\n"), "6379:6379") {
+		t.Fatalf("want a fixed-host-port warning, got %v", res.Warnings)
+	}
+	res, cfg = detect(t, map[string]string{
+		"package.json":       `{"scripts": {"dev": "node server.js"}}`,
+		".env.example":       "PORT=3000\nREDIS_PORT=6379\n",
+		"docker-compose.yml": "services:\n  redis:\n    image: redis:7\n    ports: [\"${REDIS_PORT}:6379\"]\n",
+	})
+	if cfg.Compose == nil || cfg.Compose.File != "docker-compose.yml" {
+		t.Fatalf("compose = %+v", cfg.Compose)
+	}
+	for _, w := range res.Warnings {
+		if strings.Contains(w, "host port") {
+			t.Fatalf("no warning expected for an interpolated port: %v", res.Warnings)
+		}
+	}
+}

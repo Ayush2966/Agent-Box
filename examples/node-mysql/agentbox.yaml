@@ -1,0 +1,10 @@
+version: 1
+setup: npm install
+dev: node server.js
+ports: [APP_PORT]
+db:
+  driver: mysql
+  url_env: DATABASE_URL
+  source: mysql://root:root@127.0.0.1:3306/myapp
+env:
+  template: .env.example

@@ -1,0 +1,9 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ["${REDIS_PORT}:6379"]   # REDIS_PORT is allocated per box by agentbox (see agentbox.yaml)
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 2s
+      retries: 15

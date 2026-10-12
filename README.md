@@ -22,7 +22,7 @@ c     running  APP_PORT=20002  myapp_agentbox_c  0      3
 `go install` builds without the dashboard (everything else works; `agentbox ui` says so). Release
 binaries include it. From a checkout: `make build` (needs Node 20+).
 
-macOS and Linux. Needs `git` ≥ 2.38, plus `pg_dump`/`pg_restore` if you use Postgres.
+macOS and Linux. Needs git ≥ 2.38, plus pg_dump/pg_restore for Postgres, mysql/mysqldump for MySQL, and Docker for compose.
 
 ## Quick start
 
@@ -46,9 +46,12 @@ dev: npm run dev              # supervised; restarted with backoff if it crashes
 ports: [APP_PORT, API_PORT]   # each gets a free port per box
 proxy: APP_PORT               # which port http://<box>.localhost:7777 forwards to (default: the first)
 db:
-  driver: postgres            # postgres | sqlite
+  driver: postgres            # postgres | mysql | sqlite
   url_env: DATABASE_URL
   source: postgres://localhost:5432/myapp
+compose:                      # optional: a Docker Compose project per box
+  file: compose.yaml          # default: compose.yaml / docker-compose.yml
+  services: [redis]           # default: all services
 env:
   template: .env.example      # copied and rewritten into the box's .env
   set: { NODE_ENV: development }
@@ -95,6 +98,18 @@ rather than redirecting to `http://localhost:3000`.
 
 `api_addr` in `~/.agentbox/config.yaml` must be a loopback address (`127.0.0.1:7777`, `localhost:7777`, `[::1]:7777`); the proxy and dashboard have no remote access, and a wildcard or LAN address is rejected at startup.
 
+## Docker Compose services
+
+If your dev environment is `docker compose up`, add `compose:` to `agentbox.yaml`. Every box gets its
+own Compose project (`agentbox-<repo>-<box>`): own containers, own volumes, own host ports. Write host
+ports as `"${REDIS_PORT}:6379"` in the compose file and list `REDIS_PORT` under `ports:` — agentbox
+allocates a free port per box and the box's `.env` feeds it to Compose. The stack comes up with the
+box (`up -d --wait`), stops and starts with it, and is removed with `rm` (`down -v`). `doctor` finds
+projects without a box. See `examples/compose-redis`.
+
+MySQL and MariaDB work like Postgres: `driver: mysql`, a `mysql://` source, and `mysql`/`mysqldump`
+on PATH. Each box gets `<db>_agentbox_<box>`, a fresh dump of the source. See `examples/node-mysql`.
+
 ## How it works
 
 A small daemon (started automatically) owns every box and serves a local API on a Unix socket and `127.0.0.1:7777` (token-protected).
@@ -103,4 +118,4 @@ Boxes live in `~/.agentbox/boxes/`, outside your repo, so your file watchers nev
 
 ## Roadmap
 
-Docker Compose & MySQL drivers → desktop app.
+Desktop app.

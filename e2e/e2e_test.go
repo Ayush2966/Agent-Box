@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/jackc/pgx/v5"
 	_ "modernc.org/sqlite"
 
@@ -305,5 +306,145 @@ func TestProxyAndDashboard(t *testing.T) {
 	}
 	if code, body := viaProxy("a.localhost"); code != 200 && code != 502 {
 		t.Fatalf("after start: %d %s", code, body)
+	}
+}
+
+// mysqlDSN converts a mysql:// URL to the Go driver's DSN (no database when dbName is "").
+func mysqlDSN(u *url.URL, dbName string) string {
+	host := u.Host
+	if !strings.Contains(host, ":") {
+		host += ":3306"
+	}
+	dsn := ""
+	if u.User != nil {
+		dsn = u.User.Username()
+		if pw, ok := u.User.Password(); ok {
+			dsn += ":" + pw
+		}
+		dsn += "@"
+	}
+	dsn += "tcp(" + host + ")/" + dbName
+	if u.RawQuery != "" {
+		dsn += "?" + u.RawQuery
+	}
+	return dsn
+}
+
+func TestThreeBoxesMySQL(t *testing.T) {
+	admin := os.Getenv("AGENTBOX_TEST_MYSQL_URL")
+	if admin == "" {
+		t.Skip("set AGENTBOX_TEST_MYSQL_URL to run the MySQL e2e test")
+	}
+	for _, tool := range []string{"mysql", "mysqldump"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			t.Skipf("%s not on PATH", tool)
+		}
+	}
+	e := newEnv(t)
+	repo := copyExample(t, "node-mysql")
+	u, err := url.Parse(admin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := sql.Open("mysql", mysqlDSN(u, ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := fmt.Sprintf("abe2e_%d", time.Now().UnixNano()%1_000_000_000)
+	for _, q := range []string{"CREATE DATABASE `" + name + "`", "CREATE TABLE `" + name + "`.items(name VARCHAR(20))", "INSERT INTO `" + name + "`.items VALUES('one')"} {
+		if _, err := conn.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Cleanup(func() {
+		rows, err := conn.Query("SHOW DATABASES")
+		if err != nil {
+			t.Logf("cleanup: SHOW DATABASES: %v", err)
+		} else {
+			var dbs []string
+			for rows.Next() {
+				var d string
+				rows.Scan(&d)
+				if strings.HasPrefix(d, name) {
+					dbs = append(dbs, d)
+				}
+			}
+			rows.Close()
+			for _, d := range dbs {
+				conn.Exec("DROP DATABASE IF EXISTS `" + d + "`")
+			}
+		}
+		conn.Close()
+	})
+	src := *u
+	src.Path = "/" + name
+	cfgPath := filepath.Join(repo, "agentbox.yaml")
+	cfg, _ := os.ReadFile(cfgPath)
+	os.WriteFile(cfgPath, []byte(strings.Replace(string(cfg), "mysql://root:root@127.0.0.1:3306/myapp", src.String(), 1)), 0o644)
+
+	threeBoxes(t, e, repo, func(b api.BoxView, resp map[string]any) {
+		if want := name + "_agentbox_" + b.Name; resp["db"] != want {
+			t.Errorf("box %s got database %v, want %s", b.Name, resp["db"], want)
+		}
+	})
+}
+
+func composeProjects(t *testing.T, prefix string) []string {
+	t.Helper()
+	out, err := exec.Command("docker", "compose", "ls", "--all", "--format", "json").Output()
+	if err != nil {
+		t.Fatalf("docker compose ls: %v", err)
+	}
+	var rows []struct{ Name string }
+	json.Unmarshal(out, &rows)
+	var names []string
+	for _, r := range rows {
+		if strings.HasPrefix(r.Name, prefix) {
+			names = append(names, r.Name)
+		}
+	}
+	return names
+}
+
+func TestComposeRedis(t *testing.T) {
+	if os.Getenv("AGENTBOX_TEST_DOCKER") != "1" {
+		t.Skip("set AGENTBOX_TEST_DOCKER=1 (with a running Docker daemon) to run the Compose e2e test")
+	}
+	e := newEnv(t)
+	repo := copyExample(t, "compose-redis")
+	t.Cleanup(func() {
+		_, _ = e.runErr(repo, "rm", "--force", "a")
+		_, _ = e.runErr(repo, "rm", "--force", "b")
+	})
+	e.run(repo, "new", "a")
+	e.run(repo, "new", "b")
+	var boxes []api.BoxView
+	if err := json.Unmarshal([]byte(e.run(repo, "ls", "--json")), &boxes); err != nil || len(boxes) != 2 {
+		t.Fatalf("ls --json: %v (%d boxes)", err, len(boxes))
+	}
+	byName := map[string]api.BoxView{}
+	for _, b := range boxes {
+		byName[b.Name] = b
+	}
+	prefix := "agentbox-" + boxes[0].Repo + "-"
+	if got := composeProjects(t, prefix); len(got) != 2 {
+		t.Fatalf("compose projects: %v", got)
+	}
+	a := fmt.Sprintf("http://127.0.0.1:%d/", byName["a"].Ports["APP_PORT"])
+	b := fmt.Sprintf("http://127.0.0.1:%d/", byName["b"].Ports["APP_PORT"])
+	getJSON(t, a)
+	if r := getJSON(t, a); r["hits"] != float64(2) || r["box"] != "a" {
+		t.Fatalf("box a second hit: %v", r)
+	}
+	if r := getJSON(t, b); r["hits"] != float64(1) || r["box"] != "b" {
+		t.Fatalf("box b has its own redis: %v", r)
+	}
+	e.run(repo, "rm", "--force", "a")
+	e.run(repo, "rm", "--force", "b")
+	if got := composeProjects(t, prefix); len(got) != 0 {
+		t.Fatalf("projects left after rm: %v", got)
+	}
+	if out := e.run(repo, "doctor"); !strings.Contains(out, "no problems found") {
+		t.Errorf("doctor after cleanup:\n%s", out)
 	}
 }

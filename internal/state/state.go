@@ -54,6 +54,8 @@ type Box struct {
 	// box. It is recorded at creation so that later edits to agentbox.yaml
 	// cannot reclassify agentbox's own files as the agent's work.
 	Managed []string
+	// Compose is the box's Docker Compose project name, "" when the box has no stack.
+	Compose string
 }
 
 func (b Box) ID() string { return b.RepoID + "/" + b.Name }
@@ -83,6 +85,7 @@ CREATE TABLE IF NOT EXISTS boxes (
 	last_error TEXT NOT NULL DEFAULT '',
 	created_at INTEGER NOT NULL,
 	managed    TEXT NOT NULL DEFAULT '',
+	compose    TEXT NOT NULL DEFAULT '',
 	PRIMARY KEY (repo_id, name)
 );
 CREATE TABLE IF NOT EXISTS ports (
@@ -108,6 +111,11 @@ func Open(path string) (*Store, error) {
 	}
 	// Idempotent migration for state DBs created before `managed` existed.
 	if _, err := db.Exec(`ALTER TABLE boxes ADD COLUMN managed TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		db.Close()
+		return nil, fmt.Errorf("migrate state db %s: %w", path, err)
+	}
+	if _, err := db.Exec(`ALTER TABLE boxes ADD COLUMN compose TEXT NOT NULL DEFAULT ''`); err != nil &&
 		!strings.Contains(err.Error(), "duplicate column name") {
 		db.Close()
 		return nil, fmt.Errorf("migrate state db %s: %w", path, err)
@@ -161,12 +169,12 @@ func (s *Store) Repos() ([]Repo, error) {
 	return out, rows.Err()
 }
 
-const boxCols = `repo_id, name, dir, branch, state, db_name, db_url, pid, last_step, last_error, created_at, managed`
+const boxCols = `repo_id, name, dir, branch, state, db_name, db_url, pid, last_step, last_error, created_at, managed, compose`
 
 func (s *Store) InsertBox(b Box) error {
-	_, err := s.db.Exec(`INSERT INTO boxes(`+boxCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := s.db.Exec(`INSERT INTO boxes(`+boxCols+`) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		b.RepoID, b.Name, b.Dir, b.Branch, string(b.State), b.DBName, b.DBURL, b.PID, b.LastStep, b.LastError,
-		b.CreatedAt.Unix(), encodeManaged(b.Managed))
+		b.CreatedAt.Unix(), encodeManaged(b.Managed), b.Compose)
 	if err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed") {
 		return ErrExists
 	}
@@ -174,10 +182,10 @@ func (s *Store) InsertBox(b Box) error {
 }
 
 func (s *Store) UpdateBox(b Box) error {
-	res, err := s.db.Exec(`UPDATE boxes SET dir=?, branch=?, state=?, db_name=?, db_url=?, pid=?, last_step=?, last_error=?, managed=?
+	res, err := s.db.Exec(`UPDATE boxes SET dir=?, branch=?, state=?, db_name=?, db_url=?, pid=?, last_step=?, last_error=?, managed=?, compose=?
 		WHERE repo_id=? AND name=?`,
 		b.Dir, b.Branch, string(b.State), b.DBName, b.DBURL, b.PID, b.LastStep, b.LastError,
-		encodeManaged(b.Managed), b.RepoID, b.Name)
+		encodeManaged(b.Managed), b.Compose, b.RepoID, b.Name)
 	if err != nil {
 		return err
 	}
@@ -193,7 +201,7 @@ func scanBox(sc scanner) (Box, error) {
 	var b Box
 	var st, managed string
 	var created int64
-	err := sc.Scan(&b.RepoID, &b.Name, &b.Dir, &b.Branch, &st, &b.DBName, &b.DBURL, &b.PID, &b.LastStep, &b.LastError, &created, &managed)
+	err := sc.Scan(&b.RepoID, &b.Name, &b.Dir, &b.Branch, &st, &b.DBName, &b.DBURL, &b.PID, &b.LastStep, &b.LastError, &created, &managed, &b.Compose)
 	b.State = BoxState(st)
 	b.CreatedAt = time.Unix(created, 0)
 	b.Managed = decodeManaged(managed)

@@ -3,10 +3,12 @@ package box
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/agentbox-dev/agentbox/internal/compose"
 	"github.com/agentbox-dev/agentbox/internal/config"
 	"github.com/agentbox-dev/agentbox/internal/db"
 	"github.com/agentbox-dev/agentbox/internal/errs"
@@ -83,9 +85,9 @@ func (m *Manager) Doctor(ctx context.Context, repoID string, fix bool) ([]Findin
 	if err != nil {
 		return nil, err
 	}
-	dirs, branches, dbNames := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	dirs, branches, dbNames, names := map[string]bool{}, map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, b := range boxes {
-		dirs[b.Dir], branches[b.Branch] = true, true
+		dirs[b.Dir], branches[b.Branch], names[b.Name] = true, true, true
 		if b.DBName != "" {
 			dbNames[b.DBName] = true
 		}
@@ -100,6 +102,9 @@ func (m *Manager) Doctor(ctx context.Context, repoID string, fix bool) ([]Findin
 			m.stopProc(b.ID())
 			if drv != nil && b.DBName != "" {
 				_ = drv.Drop(ctx, b.DBName, b.Dir)
+			}
+			if b.Compose != "" {
+				_ = compose.DownProject(ctx, m.d.Compose, b.Compose, io.Discard)
 			}
 			_ = m.d.Store.DeleteBox(b.RepoID, b.Name)
 			m.closeLog(b, true)
@@ -136,6 +141,24 @@ func (m *Manager) Doctor(ctx context.Context, repoID string, fix bool) ([]Findin
 				}
 				fixed := fix && drv.Drop(ctx, n, "") == nil
 				add("orphan_db", fixed, "database %s has no box", n)
+			}
+		}
+	}
+	if cfg != nil && cfg.Compose != nil {
+		if err := compose.Check(ctx, m.d.Compose); err != nil {
+			add("tools", false, "docker compose is not available but %s configures compose: %v", config.FileName, err)
+		} else {
+			prefix := compose.ProjectName(repoID, "")
+			projects, err := compose.Projects(ctx, m.d.Compose, prefix)
+			if err != nil {
+				add("compose", false, "could not list compose projects: %v", err)
+			}
+			for _, p := range projects {
+				if names[strings.TrimPrefix(p, prefix)] {
+					continue
+				}
+				fixed := fix && compose.DownProject(ctx, m.d.Compose, p, io.Discard) == nil
+				add("orphan_compose", fixed, "compose project %s has no box (remove it with `docker compose -p %s down -v`)", p, p)
 			}
 		}
 	}
