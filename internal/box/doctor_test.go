@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/agentbox-dev/agentbox/internal/errs"
 	"github.com/agentbox-dev/agentbox/internal/state"
@@ -87,5 +89,63 @@ func TestRefreshDBRequiresDB(t *testing.T) {
 	}
 	if err := m.RefreshDB(ctx, "nope", false); errs.From(err).Code != errs.NotFound {
 		t.Fatalf("unknown repo err = %v", err)
+	}
+}
+
+func TestDoctorReportDoesNotWaitForLifecycleLock(t *testing.T) {
+	m := newTestManager(t)
+	repo := newSQLiteRepo(t, sqliteConfig)
+	r, err := m.ResolveRepo(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lock := m.repoLock(r.ID)
+	lock.Lock() // a long `new` is in progress
+
+	report := make(chan error, 1)
+	go func() { _, err := m.Doctor(ctx, r.ID, false); report <- err }()
+	select {
+	case err := <-report:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		lock.Unlock()
+		t.Fatal("the read-only doctor report waited for the lifecycle lock")
+	}
+
+	fixed := make(chan struct{})
+	go func() { _, _ = m.Doctor(ctx, r.ID, true); close(fixed) }()
+	select {
+	case <-fixed:
+		t.Fatal("doctor --fix ran while a lifecycle operation held the lock")
+	case <-time.After(200 * time.Millisecond):
+	}
+	lock.Unlock()
+	<-fixed
+}
+
+func TestDoctorIgnoresBoxesMidTransition(t *testing.T) {
+	m := newTestManager(t)
+	repo := newSQLiteRepo(t, sqliteConfig)
+	r, err := m.ResolveRepo(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A box whose worktree does not exist yet is not drift while it is still being created.
+	for _, st := range []state.BoxState{state.Creating, state.Removing} {
+		name := "mid-" + string(st)
+		if err := m.d.Store.InsertBox(state.Box{RepoID: r.ID, Name: name, Dir: filepath.Join(m.d.BoxesDir, r.ID, name), Branch: BranchPrefix + name, State: st}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fs, err := m.Doctor(ctx, r.ID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range fs {
+		if f.Kind == "missing_worktree" {
+			t.Errorf("box in transition reported as drift: %+v", f)
+		}
 	}
 }

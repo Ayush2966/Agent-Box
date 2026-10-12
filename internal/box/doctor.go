@@ -11,6 +11,7 @@ import (
 	"github.com/agentbox-dev/agentbox/internal/db"
 	"github.com/agentbox-dev/agentbox/internal/errs"
 	"github.com/agentbox-dev/agentbox/internal/events"
+	"github.com/agentbox-dev/agentbox/internal/state"
 	"github.com/agentbox-dev/agentbox/internal/worktree"
 )
 
@@ -50,9 +51,14 @@ func (m *Manager) Doctor(ctx context.Context, repoID string, fix bool) ([]Findin
 	if err != nil {
 		return nil, err
 	}
-	lock := m.repoLock(repoID)
-	lock.Lock()
-	defer lock.Unlock()
+	// The report is read-only and must never wait behind a long `new`
+	// (spec: reads are never blocked). Repairs do serialise with lifecycle
+	// operations, since they delete rows and drop databases.
+	if fix {
+		lock := m.repoLock(repoID)
+		lock.Lock()
+		defer lock.Unlock()
+	}
 
 	var out []Finding
 	add := func(kind string, fixed bool, format string, a ...any) {
@@ -82,6 +88,9 @@ func (m *Manager) Doctor(ctx context.Context, repoID string, fix bool) ([]Findin
 		dirs[b.Dir], branches[b.Branch] = true, true
 		if b.DBName != "" {
 			dbNames[b.DBName] = true
+		}
+		if b.State == state.Creating || b.State == state.Removing {
+			continue // mid-transition without the lock: a missing dir is expected, not drift
 		}
 		if _, err := os.Stat(b.Dir); !os.IsNotExist(err) {
 			continue

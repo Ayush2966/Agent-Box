@@ -150,7 +150,12 @@ func (a *app) daemonCmd() *cobra.Command {
 			}
 			out := cmd.OutOrStdout()
 			if !daemon.Ping(p.Sock) {
-				fmt.Fprintln(out, "daemon not running (it starts automatically on the next command)")
+				if pid, stale := daemon.StalePID(p); stale {
+					_ = os.Remove(p.PID)
+					fmt.Fprintf(out, "daemon not running; removed stale pid file (pid %d is dead)\n", pid)
+				} else {
+					fmt.Fprintln(out, "daemon not running (it starts automatically on the next command)")
+				}
 				return nil
 			}
 			pid, _ := daemon.ReadPID(p.PID)
@@ -169,16 +174,24 @@ func (a *app) daemonCmd() *cobra.Command {
 		},
 	}
 	stopDaemon := func(cmd *cobra.Command, p daemon.Paths) error {
-		if daemon.Ping(p.Sock) {
-			if boxes, err := client.New(p.Sock).ListBoxes(cmd.Context(), ""); err == nil {
-				for _, b := range boxes {
-					if b.State == "running" {
-						fmt.Fprintf(cmd.OutOrStdout(), "stopping dev server of %s\n", b.Name)
-					}
+		out := cmd.OutOrStdout()
+		if !daemon.Ping(p.Sock) {
+			fmt.Fprintln(out, "daemon not running")
+			return nil
+		}
+		pid, _ := daemon.ReadPID(p.PID)
+		if boxes, err := client.New(p.Sock).ListBoxes(cmd.Context(), ""); err == nil {
+			for _, b := range boxes {
+				if b.State == "running" {
+					fmt.Fprintf(out, "stopping dev server of %s\n", b.Name)
 				}
 			}
 		}
-		return daemon.Stop(p, 15*time.Second)
+		if err := daemon.Stop(p, 15*time.Second); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "daemon stopped (pid %d)\n", pid)
+		return nil
 	}
 	stop := &cobra.Command{
 		Use:   "stop",

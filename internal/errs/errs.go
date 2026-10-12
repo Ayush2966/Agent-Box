@@ -46,7 +46,11 @@ func (e *E) WithHint(h string) *E { c := *e; c.Hint = h; return &c }
 func (e *E) WithStep(s string) *E { c := *e; c.Step = s; return &c }
 
 // From returns the *E in err's chain, or wraps err as an Internal error.
+// From(nil) is nil, so callers may convert before checking for an error.
 func From(err error) *E {
+	if err == nil {
+		return nil
+	}
 	var e *E
 	if errors.As(err, &e) {
 		return e

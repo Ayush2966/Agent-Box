@@ -199,8 +199,15 @@ func (p *Postgres) dumpRestore(ctx context.Context, target string) error {
 	if err != nil {
 		return err
 	}
-	dump := exec.CommandContext(ctx, "pg_dump", "--format=custom", "--no-owner", "--no-acl", "--dbname", p.src.String())
-	restore := exec.CommandContext(ctx, "pg_restore", "--no-owner", "--no-acl", "--dbname", p.urlFor(target))
+	// The password travels in PGPASSWORD, never in argv, where `ps` would show it.
+	srcArg, srcEnv := commandURL(p.src)
+	tgt := *p.src
+	tgt.Path = "/" + target
+	tgtArg, tgtEnv := commandURL(&tgt)
+	dump := exec.CommandContext(ctx, "pg_dump", "--format=custom", "--no-owner", "--no-acl", "--dbname", srcArg)
+	dump.Env = append(os.Environ(), srcEnv...)
+	restore := exec.CommandContext(ctx, "pg_restore", "--no-owner", "--no-acl", "--dbname", tgtArg)
+	restore.Env = append(os.Environ(), tgtEnv...)
 	var dumpErr, restoreErr bytes.Buffer
 	dump.Stdout, dump.Stderr = w, &dumpErr
 	restore.Stdin, restore.Stderr = r, &restoreErr
@@ -222,13 +229,36 @@ func (p *Postgres) dumpRestore(ctx context.Context, target string) error {
 	w.Close()
 	rErr := restore.Wait()
 	dErr := dump.Wait()
-	if dErr != nil {
-		return fmt.Errorf("pg_dump failed: %v: %s", dErr, strings.TrimSpace(dumpErr.String()))
-	}
+	return dumpRestoreError(dErr, dumpErr.String(), rErr, restoreErr.String())
+}
+
+// dumpRestoreError names the tool that actually failed. When pg_restore dies,
+// pg_dump dies too, of a broken pipe, so the restore error is reported first
+// and the dump error is kept as context rather than replacing the real cause.
+func dumpRestoreError(dErr error, dumpMsg string, rErr error, restoreMsg string) error {
+	var parts []string
 	if rErr != nil {
-		return fmt.Errorf("pg_restore failed: %v: %s", rErr, strings.TrimSpace(restoreErr.String()))
+		parts = append(parts, fmt.Sprintf("pg_restore failed: %v: %s", rErr, strings.TrimSpace(restoreMsg)))
 	}
-	return nil
+	if dErr != nil {
+		parts = append(parts, fmt.Sprintf("pg_dump failed: %v: %s", dErr, strings.TrimSpace(dumpMsg)))
+	}
+	if len(parts) == 0 {
+		return nil
+	}
+	return errors.New(strings.Join(parts, "; "))
+}
+
+// commandURL splits a connection URL into an argv-safe form (password removed)
+// and the environment that carries the password instead.
+func commandURL(u *url.URL) (arg string, env []string) {
+	pw, ok := u.User.Password()
+	if !ok {
+		return u.String(), nil
+	}
+	c := *u
+	c.User = url.User(u.User.Username())
+	return c.String(), []string{"PGPASSWORD=" + pw}
 }
 
 func (p *Postgres) Clone(ctx context.Context, box, _ string) (Clone, error) {

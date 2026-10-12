@@ -368,7 +368,7 @@ func (m *Manager) Remove(ctx context.Context, repoID, name string, opts RemoveOp
 	var problems []string
 	note := func(format string, a ...any) { problems = append(problems, fmt.Sprintf(format, a...)) }
 	m.stopProc(b.ID())
-	if b.DBName != "" {
+	if b.DBName != "" && !dbLivesInBox(b) {
 		if cfgErr != nil || cfg.DB == nil {
 			note("database %s was not dropped: agentbox.yaml no longer configures a db", b.DBName)
 		} else if drv, err := m.d.NewDriver(cfg.DB, repo.Path, db.Options{}); err != nil {
@@ -398,6 +398,13 @@ func (m *Manager) Remove(ctx context.Context, repoID, name string, opts RemoveOp
 			WithHint("run `agentbox doctor` to find anything left behind")
 	}
 	return nil
+}
+
+// dbLivesInBox reports whether the box's database is a file inside the box
+// directory (the SQLite driver), so removing the worktree removes it too and
+// a missing driver is nothing to warn about.
+func dbLivesInBox(b state.Box) bool {
+	return b.DBURL != "" && !strings.Contains(b.DBURL, "://")
 }
 
 func (m *Manager) checkNoUnmergedWork(repo state.Repo, b state.Box, cfg *config.Config) error {

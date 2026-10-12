@@ -194,3 +194,26 @@ func TestListBranches(t *testing.T) {
 		t.Fatalf("got %v, %v", got, err)
 	}
 }
+
+func TestOptionLikeRefsAreRejected(t *testing.T) {
+	repo := testutil.NewRepo(t, map[string]string{"a": "1\n"})
+	dir := filepath.Join(t.TempDir(), "wt")
+	if err := Add(repo, dir, "agentbox/x", "--force"); err == nil {
+		t.Fatal("Add accepted --force as a ref")
+	}
+	if BranchExists(repo, "agentbox/x") {
+		t.Error("a branch was created from an option-like ref")
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Error("a worktree was created from an option-like ref")
+	}
+	if _, err := Diff(repo, "--no-index"); err == nil {
+		t.Error("Diff accepted an option as its base")
+	}
+	if _, _, err := AheadBehind(repo, "--all", "HEAD"); err == nil {
+		t.Error("AheadBehind accepted an option as its base")
+	}
+	if err := Add(repo, dir, "agentbox/y", "HEAD"); err != nil {
+		t.Fatalf("a real ref must still work: %v", err)
+	}
+}

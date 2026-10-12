@@ -31,3 +31,9 @@ func TestFrom(t *testing.T) {
 		t.Fatalf("wrapped: %+v", e)
 	}
 }
+
+func TestFromNil(t *testing.T) {
+	if e := From(nil); e != nil {
+		t.Fatalf("From(nil) = %+v, want nil", e)
+	}
+}

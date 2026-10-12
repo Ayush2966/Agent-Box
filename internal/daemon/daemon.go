@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -113,6 +114,28 @@ func ReadPID(path string) (int, error) {
 	return strconv.Atoi(strings.TrimSpace(string(b)))
 }
 
+// StalePID reports a pid file left behind by a daemon that is no longer
+// running (it crashed or was killed before it could clean up).
+func StalePID(p Paths) (pid int, stale bool) {
+	pid, err := ReadPID(p.PID)
+	if err != nil || pid <= 0 {
+		return 0, false
+	}
+	if err := syscall.Kill(pid, 0); err == nil || errors.Is(err, syscall.EPERM) {
+		return pid, false
+	}
+	return pid, true
+}
+
+// maxSockPath is the longest unix socket path the OS accepts (sun_path minus
+// the terminating NUL): 104 bytes on macOS and the BSDs, 108 on Linux.
+func maxSockPath() int {
+	if runtime.GOOS == "linux" {
+		return 107
+	}
+	return 103
+}
+
 func ensureToken(path string) (string, error) {
 	if b, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(b))) > 0 {
 		return strings.TrimSpace(string(b)), nil
@@ -128,6 +151,10 @@ func ensureToken(path string) (string, error) {
 // Run is the daemon's main loop. It returns when ctx is cancelled, after
 // stopping every dev server.
 func Run(ctx context.Context, p Paths) error {
+	if max := maxSockPath(); len(p.Sock) > max {
+		return fmt.Errorf("agentbox home %s is too long: its unix socket path is %d bytes and this OS allows %d; set AGENTBOX_HOME to a shorter path",
+			p.Home, len(p.Sock), max)
+	}
 	for _, d := range []string{p.Home, p.Logs, p.Boxes} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return err

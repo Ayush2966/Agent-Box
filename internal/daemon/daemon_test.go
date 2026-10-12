@@ -165,3 +165,11 @@ func TestRunRefusesSecondDaemonInSameHome(t *testing.T) {
 		t.Fatalf("survivor returned %v", err)
 	}
 }
+
+func TestRunExplainsAnOverlongSocketPath(t *testing.T) {
+	home := filepath.Join(tempHome(t), strings.Repeat("x", 120))
+	err := daemon.Run(context.Background(), daemon.PathsFor(home))
+	if err == nil || !strings.Contains(err.Error(), "too long") || !strings.Contains(err.Error(), "AGENTBOX_HOME") {
+		t.Fatalf("got %v, want an error naming the socket-path limit and AGENTBOX_HOME", err)
+	}
+}

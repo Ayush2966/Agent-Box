@@ -249,3 +249,48 @@ func TestPostgresPrepareRebuildsHalfBuiltTemplate(t *testing.T) {
 		t.Fatalf("box cloned from a half-built template has %d rows, want 1", n)
 	}
 }
+
+func TestDumpRestoreErrorReportsTheRealCause(t *testing.T) {
+	dErr, rErr := errors.New("signal: broken pipe"), errors.New("exit status 1")
+	err := dumpRestoreError(dErr, "", rErr, "pg_restore: error: could not execute query: permission denied")
+	if err == nil {
+		t.Fatal("no error")
+	}
+	s := err.Error()
+	if !strings.HasPrefix(s, "pg_restore failed") || !strings.Contains(s, "permission denied") || !strings.Contains(s, "broken pipe") {
+		t.Fatalf("both tools failed: got %q, want pg_restore first with both causes", s)
+	}
+	if err := dumpRestoreError(dErr, "pg_dump: error: connection failed", nil, ""); err == nil || !strings.HasPrefix(err.Error(), "pg_dump failed") || !strings.Contains(err.Error(), "connection failed") {
+		t.Fatalf("dump only: got %v", err)
+	}
+	if err := dumpRestoreError(nil, "", rErr, "bad archive"); err == nil || !strings.HasPrefix(err.Error(), "pg_restore failed") {
+		t.Fatalf("restore only: got %v", err)
+	}
+	if err := dumpRestoreError(nil, "", nil, ""); err != nil {
+		t.Fatalf("no failure: got %v", err)
+	}
+}
+
+func TestCommandURLKeepsPasswordOutOfArgv(t *testing.T) {
+	u, err := url.Parse("postgres://app:hunter2@db.internal:5432/myapp?sslmode=disable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	arg, env := commandURL(u)
+	if strings.Contains(arg, "hunter2") {
+		t.Fatalf("password leaked into argv: %s", arg)
+	}
+	if !slices.Contains(env, "PGPASSWORD=hunter2") {
+		t.Fatalf("PGPASSWORD missing from env: %v", env)
+	}
+	if !strings.Contains(arg, "app@db.internal:5432/myapp") || !strings.Contains(arg, "sslmode=disable") {
+		t.Fatalf("argv URL lost user/host/db/query: %s", arg)
+	}
+	if u.User.String() != "app:hunter2" {
+		t.Fatal("commandURL mutated the source URL")
+	}
+	plain, _ := url.Parse("postgres://app@localhost/x")
+	if arg, env := commandURL(plain); arg != plain.String() || len(env) != 0 {
+		t.Fatalf("no password: got %q %v", arg, env)
+	}
+}

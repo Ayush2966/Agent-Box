@@ -445,3 +445,19 @@ func TestGeneratedFilesStayManagedAfterConfigChanges(t *testing.T) {
 		})
 	}
 }
+
+func TestRemoveSQLiteBoxAfterConfigIsDeletedHasNoDBWarning(t *testing.T) {
+	m := newTestManager(t)
+	repo := newSQLiteRepo(t, sqliteConfig)
+	b, err := m.New(ctx, NewOptions{RepoPath: repo, Name: "a", NoDev: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(filepath.Join(repo, "agentbox.yaml"))
+	// The SQLite clone lives inside the box dir, so removing the worktree
+	// drops it; there is nothing to warn about.
+	if err := m.Remove(ctx, b.RepoID, "a", RemoveOptions{Force: true}); err != nil {
+		t.Fatalf("rm of a sqlite box after agentbox.yaml was deleted: %v", err)
+	}
+	assertGone(t, m, repo, "a")
+}

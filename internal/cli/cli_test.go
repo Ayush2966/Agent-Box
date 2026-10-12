@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -42,5 +44,38 @@ func TestPrintTable(t *testing.T) {
 	printTable(&b, nil, false)
 	if !strings.Contains(b.String(), "no boxes") {
 		t.Errorf("empty table: %q", b.String())
+	}
+}
+
+// Unix socket paths are limited to ~104 bytes on macOS, so homes live under /tmp.
+func shortTempHome(t *testing.T) string {
+	t.Helper()
+	home, err := os.MkdirTemp("/tmp", "abcli")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(home) })
+	return home
+}
+
+func TestDaemonStatusReportsStalePIDFile(t *testing.T) {
+	home := shortTempHome(t)
+	t.Setenv("AGENTBOX_HOME", home)
+	pidFile := filepath.Join(home, "daemon.pid")
+	os.WriteFile(pidFile, []byte("999999999\n"), 0o600) // above every OS's pid_max: certainly dead
+	code, out, stderr := run("daemon", "status")
+	if code != 0 || !strings.Contains(out, "stale") || !strings.Contains(out, "999999999") {
+		t.Fatalf("exit %d\nstdout: %s\nstderr: %s", code, out, stderr)
+	}
+	if _, err := os.Stat(pidFile); !os.IsNotExist(err) {
+		t.Fatal("the stale pid file was not removed")
+	}
+}
+
+func TestDaemonStopSaysWhenNothingWasRunning(t *testing.T) {
+	t.Setenv("AGENTBOX_HOME", shortTempHome(t))
+	code, out, stderr := run("daemon", "stop")
+	if code != 0 || !strings.Contains(out, "not running") {
+		t.Fatalf("exit %d\nstdout: %s\nstderr: %s", code, out, stderr)
 	}
 }

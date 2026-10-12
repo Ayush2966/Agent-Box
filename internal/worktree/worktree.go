@@ -67,8 +67,20 @@ func Add(repo, dir, branch, from string) error {
 	if from == "" {
 		from = "HEAD"
 	}
+	if err := checkRef(repo, from); err != nil {
+		return err
+	}
 	_, err := git(repo, "worktree", "add", "-q", "-b", branch, dir, from)
 	return err
+}
+
+// checkRef rejects user-supplied refs that git would otherwise parse as
+// options ("--force" would silently mean HEAD) and refs that don't exist.
+func checkRef(dir, ref string) error {
+	if _, err := git(dir, "rev-parse", "--verify", "--quiet", "--end-of-options", ref+"^{commit}"); err != nil {
+		return fmt.Errorf("%q is not a branch, tag or commit", ref)
+	}
+	return nil
 }
 
 // Remove deletes the worktree at dir, discarding its changes. A worktree
@@ -123,6 +135,9 @@ func Changes(dir string, untracked bool) ([]string, error) {
 
 // AheadBehind counts commits on branch that base lacks (ahead) and vice versa.
 func AheadBehind(repo, base, branch string) (ahead, behind int, err error) {
+	if err := checkRef(repo, base); err != nil {
+		return 0, 0, err
+	}
 	out, err := git(repo, "rev-list", "--left-right", "--count", base+"..."+branch)
 	if err != nil {
 		return 0, 0, err
@@ -168,6 +183,9 @@ func Merge(repo, branch string, squash bool, message string) error {
 
 // Diff shows tracked changes in dir (committed or not) since it diverged from base.
 func Diff(dir, base string) (string, error) {
+	if err := checkRef(dir, base); err != nil {
+		return "", err
+	}
 	mb, err := git(dir, "merge-base", base, "HEAD")
 	if err != nil {
 		return "", err
@@ -186,6 +204,9 @@ func ListBranches(repo, prefix string) ([]string, error) {
 // MergeIsNoop reports whether merging branch into base would change nothing,
 // e.g. because the branch was already squash-merged.
 func MergeIsNoop(repo, base, branch string) bool {
+	if checkRef(repo, base) != nil {
+		return false
+	}
 	out, err := git(repo, "merge-tree", "--write-tree", base, branch)
 	if err != nil {
 		return false // conflicts (exit 1) or an old git
