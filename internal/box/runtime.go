@@ -60,12 +60,19 @@ func (m *Manager) info(b state.Box) Info {
 	}
 	i.RepoPath = repo.Path
 	cfg, _ := config.Load(repo.Path)
-	if base, err := worktree.CurrentBranch(repo.Path); err == nil {
-		i.Base = base
-		i.Ahead, i.Behind, _ = worktree.AheadBehind(repo.Path, base, b.Branch)
-	}
-	if ch, err := userChanges(b, cfg); err == nil {
-		i.Dirty = len(ch)
+	// No git while the worktree is being made or torn down: a `git status`
+	// in a half-checked-out worktree takes its index.lock, and the
+	// `git worktree add` still running there then fails with "index.lock:
+	// File exists" — seen on CI, where the dashboard/CLI polling GET /v1/boxes
+	// during creation raced the checkout.
+	if b.State != state.Creating && b.State != state.Removing {
+		if base, err := worktree.CurrentBranch(repo.Path); err == nil {
+			i.Base = base
+			i.Ahead, i.Behind, _ = worktree.AheadBehind(repo.Path, base, b.Branch)
+		}
+		if ch, err := userChanges(b, cfg); err == nil {
+			i.Dirty = len(ch)
+		}
 	}
 	if cfg != nil {
 		i.Env = map[string]string{}

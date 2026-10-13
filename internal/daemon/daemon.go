@@ -193,6 +193,18 @@ func Run(ctx context.Context, p Paths) error {
 		return err
 	}
 	defer lock.Close()
+	// The pid file goes down first, while the lock already makes this daemon
+	// the only one in this home: once the socket answers, the pid file must
+	// already exist — `daemon status` and the tests read it right after Ping.
+	if err := os.WriteFile(p.PID, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
+		return err
+	}
+	started := false
+	defer func() {
+		if !started {
+			_ = os.Remove(p.PID) // never served: leave no pid behind
+		}
+	}()
 
 	logf, err := os.OpenFile(p.Log, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
@@ -260,9 +272,7 @@ func Run(ctx context.Context, p Paths) error {
 		servers = append(servers, &http.Server{Handler: Dispatch(px, srv.Handler(true)), BaseContext: base})
 		listeners = append(listeners, tl)
 	}
-	if err := os.WriteFile(p.PID, []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600); err != nil {
-		return err
-	}
+	started = true
 
 	errc := make(chan error, len(servers))
 	for i, s := range servers {

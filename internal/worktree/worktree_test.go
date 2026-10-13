@@ -217,3 +217,16 @@ func TestOptionLikeRefsAreRejected(t *testing.T) {
 		t.Fatalf("a real ref must still work: %v", err)
 	}
 }
+
+func TestGitNeverTakesOptionalLocks(t *testing.T) {
+	cmd := gitCmd(".", "status")
+	found := false
+	for _, kv := range cmd.Env {
+		if kv == "GIT_OPTIONAL_LOCKS=0" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("daemon git commands must run with GIT_OPTIONAL_LOCKS=0 (status polls must not hold index.lock)")
+	}
+}

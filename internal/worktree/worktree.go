@@ -20,9 +20,20 @@ type ConflictError struct{ Files []string }
 
 func (e *ConflictError) Error() string { return "merge conflict in: " + strings.Join(e.Files, ", ") }
 
-func gitRaw(dir string, args ...string) (string, error) {
+// gitCmd builds a git invocation in dir. GIT_OPTIONAL_LOCKS=0: the daemon runs
+// `git status` on every box whenever a client lists them, and status
+// opportunistically refreshes and rewrites the index under index.lock; a
+// status racing a `git worktree add` or a user's own git command must never
+// hold that lock (git documents this setting for exactly such background use).
+func gitCmd(dir string, args ...string) *exec.Cmd {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
+	return cmd
+}
+
+func gitRaw(dir string, args ...string) (string, error) {
+	cmd := gitCmd(dir, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	slog.Debug("git", "dir", dir, "args", args)

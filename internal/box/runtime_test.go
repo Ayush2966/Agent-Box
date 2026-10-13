@@ -205,3 +205,22 @@ func TestRecoverAfterDaemonRestart(t *testing.T) {
 		t.Fatalf("creating box after recover: %+v", info.Box)
 	}
 }
+
+func TestInfoRunsNoGitWhileCreatingOrRemoving(t *testing.T) {
+	m := newTestManager(t)
+	repo := newSQLiteRepo(t, sqliteConfig)
+	b, err := m.New(ctx, NewOptions{RepoPath: repo, Name: "a", NoDev: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	testutil.WriteFiles(t, b.Dir, map[string]string{"scratch.txt": "dirty\n"})
+	if got := m.info(b); got.Dirty != 1 || got.Base == "" {
+		t.Fatalf("a ready box is inspected with git: %+v", got)
+	}
+	for _, st := range []state.BoxState{state.Creating, state.Removing} {
+		b.State = st
+		if got := m.info(b); got.Dirty != 0 || got.Ahead != 0 || got.Behind != 0 || got.Base != "" {
+			t.Fatalf("state %s: git ran in a worktree that is being made or torn down: %+v", st, got)
+		}
+	}
+}
