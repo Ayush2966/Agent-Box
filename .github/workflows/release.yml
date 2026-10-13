@@ -19,3 +19,23 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+  # The desktop app needs the macOS toolchain (CGO + AppKit), which GoReleaser's
+  # Linux job cannot provide, so it is built here and attached to the release
+  # GoReleaser just created. Universal (arm64 + amd64), unsigned.
+  desktop:
+    needs: release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: make desktop DESKTOP_ARCHS="arm64 amd64"
+      - run: lipo -info build/agentbox-desktop && plutil -lint build/Agentbox.app/Contents/Info.plist
+      - run: ditto -c -k --keepParent build/Agentbox.app "build/Agentbox-${GITHUB_REF_NAME#v}-macos-universal.zip"
+      - run: gh release upload "$GITHUB_REF_NAME" build/Agentbox-*-macos-universal.zip --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

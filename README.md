@@ -117,14 +117,21 @@ rejects the flag). See `examples/node-mysql`.
 
 ## Desktop app
 
-`make desktop` builds `build/Agentbox.app` (macOS; needs Node 20+ and the Xcode Command Line Tools —
-the app is a native window around the same dashboard, so no second UI to maintain). It starts the
-daemon itself and opens signed in; box links open in your browser. The app binary is also the full
-`agentbox` CLI (`Agentbox.app/Contents/MacOS/agentbox-desktop ls` works). It is unsigned. A locally built
-app opens directly; the CI zip is quarantined, so the first launch is refused — allow it under System
-Settings → Privacy & Security → Open Anyway, or run `xattr -dr com.apple.quarantine Agentbox.app`. Launched from the Dock, the app widens `PATH` with your login shell's so the
-daemon finds `pg_dump`, `mysqldump`, `docker` and `node`. If startup fails after the daemon was spawned,
-the daemon keeps running; `agentbox daemon stop` stops it. CI attaches the `.app` zip to every run; releases do not include it yet.
+Every release ships `Agentbox-<version>-macos-universal.zip` (Apple silicon + Intel): unzip, drop
+`Agentbox.app` into Applications, open it. It starts the daemon itself and opens signed in; box links
+open in your browser. The app is a native window around the same dashboard, so there is no second UI
+to maintain, and its binary is also the full `agentbox` CLI
+(`Agentbox.app/Contents/MacOS/agentbox-desktop ls` works).
+
+The app is unsigned, so macOS refuses the first launch of a downloaded copy: allow it under System
+Settings → Privacy & Security → Open Anyway, or run `xattr -dr com.apple.quarantine Agentbox.app`.
+Launched from the Dock, the app widens `PATH` with your login shell's so the daemon finds `pg_dump`,
+`mysqldump`, `docker` and `node`. If startup fails after the daemon was spawned, the daemon keeps
+running; `agentbox daemon stop` stops it.
+
+From a checkout, `make desktop` builds `build/Agentbox.app` for this Mac (needs Node 20+ and the Xcode
+Command Line Tools; `DESKTOP_ARCHS="arm64 amd64"` for a universal build) and `make icon` re-renders the
+icon from `desktop/icon/main.go`.
 
 ## How it works
 
