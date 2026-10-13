@@ -1,9 +1,12 @@
 version: 2
+# The repository is Agent-Box; the tool, its binary, archives and cask are agentbox.
+project_name: agentbox
 before:
   hooks:
     - sh -c "cd web && npm ci && npm run build"
 builds:
   - main: ./cmd/agentbox
+    binary: agentbox
     env: [CGO_ENABLED=0]
     goos: [darwin, linux]
     goarch: [amd64, arm64]
@@ -13,7 +16,8 @@ archives:
 checksum:
   name_template: checksums.txt
 homebrew_casks:
-  - repository: { owner: Ayush2966, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
+  - name: agentbox
+    repository: { owner: Ayush2966, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
     homepage: https://github.com/Ayush2966/Agent-Box
     description: Isolated dev environments for parallel AI coding agents
     hooks:
