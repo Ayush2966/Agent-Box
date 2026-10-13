@@ -20,9 +20,16 @@ homebrew_casks:
     repository: { owner: Ayush2966, name: homebrew-tap, token: "{{ .Env.HOMEBREW_TAP_TOKEN }}" }
     homepage: https://github.com/Ayush2966/Agent-Box
     description: Isolated dev environments for parallel AI coding agents
-    hooks:
-      post:
-        install: |
-          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/agentbox"]
-          end
+    # The binary is unsigned, so the quarantine flag Homebrew puts on the download
+    # must come off or macOS refuses to run it. hooks.post.install would render the
+    # legacy `postflight` block that Homebrew 7 warns about on every install;
+    # custom_block carries the steps form instead (GoReleaser v2.19's
+    # hooks.post.install_steps can replace it). chdir "." is the staged download.
+    # GoReleaser puts custom_block before `version`, which `brew style` flags as
+    # stanza order; nothing else minds.
+    custom_block: |
+      on_macos do
+        postflight_steps do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "agentbox"], chdir: "."
+        end
+      end

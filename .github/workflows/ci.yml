@@ -96,6 +96,9 @@ jobs:
       - run: make desktop DESKTOP_ARCHS="arm64 amd64"
       - run: CGO_ENABLED=1 CGO_LDFLAGS="-framework UniformTypeIdentifiers" go vet -tags desktop,production ./cmd/agentbox-desktop/
       - run: lipo -info build/agentbox-desktop && plutil -lint build/Agentbox.app/Contents/Info.plist && test -f build/Agentbox.app/Contents/Resources/agentbox.icns
-      - run: ditto -c -k --keepParent build/Agentbox.app build/Agentbox.app.zip
+      - run: codesign --verify --strict --verbose=2 build/Agentbox.app
+      - run: ditto -c -k --keepParent build/Agentbox.app build/Agentbox-0.0.0-macos-universal.zip
+      # The release writes the app's Homebrew cask from a template; render it here so a broken template fails CI, not a release.
+      - run: sh desktop/publish-cask.sh render build/Agentbox-0.0.0-macos-universal.zip 0.0.0 | ruby -c
       - uses: actions/upload-artifact@v4
-        with: { name: Agentbox.app, path: build/Agentbox.app.zip }
+        with: { name: Agentbox.app, path: build/Agentbox-0.0.0-macos-universal.zip }

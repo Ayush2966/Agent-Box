@@ -39,3 +39,8 @@ jobs:
       - run: gh release upload "$GITHUB_REF_NAME" build/Agentbox-*-macos-universal.zip --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # `brew install --cask Ayush2966/tap/agentbox-desktop`: the cask is written
+      # from the uploaded zip with the same token GoReleaser uses for the CLI cask.
+      - run: sh desktop/publish-cask.sh publish build/Agentbox-*-macos-universal.zip "${GITHUB_REF_NAME#v}"
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}

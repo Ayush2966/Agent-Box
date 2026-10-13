@@ -117,21 +117,26 @@ rejects the flag). See `examples/node-mysql`.
 
 ## Desktop app
 
-Every release ships `Agentbox-<version>-macos-universal.zip` (Apple silicon + Intel): unzip, drop
-`Agentbox.app` into Applications, open it. It starts the daemon itself and opens signed in; box links
+    brew install --cask Ayush2966/tap/agentbox-desktop
+
+or download `Agentbox-<version>-macos-universal.zip` (Apple silicon + Intel) from a release, unzip,
+and drop `Agentbox.app` into Applications. It starts the daemon itself and opens signed in; box links
 open in your browser. The app is a native window around the same dashboard, so there is no second UI
 to maintain, and its binary is also the full `agentbox` CLI
 (`Agentbox.app/Contents/MacOS/agentbox-desktop ls` works).
 
-The app is unsigned, so macOS refuses the first launch of a downloaded copy: allow it under System
-Settings → Privacy & Security → Open Anyway, or run `xattr -dr com.apple.quarantine Agentbox.app`.
+The app is signed ad hoc, not with a Developer ID, so macOS refuses the first launch of a downloaded
+copy: allow it under System Settings → Privacy & Security → Open Anyway, or run
+`xattr -dr com.apple.quarantine Agentbox.app`. The cask does that for you.
 Launched from the Dock, the app widens `PATH` with your login shell's so the daemon finds `pg_dump`,
 `mysqldump`, `docker` and `node`. If startup fails after the daemon was spawned, the daemon keeps
 running; `agentbox daemon stop` stops it.
 
 From a checkout, `make desktop` builds `build/Agentbox.app` for this Mac (needs Node 20+ and the Xcode
 Command Line Tools; `DESKTOP_ARCHS="arm64 amd64"` for a universal build) and `make icon` re-renders the
-icon from `desktop/icon/main.go`.
+icon from `desktop/icon/main.go`. With a Developer ID certificate,
+`make desktop CODESIGN_IDENTITY="Developer ID Application: …"` signs with it (hardened runtime,
+timestamp) as the starting point for notarization.
 
 ## How it works
 
