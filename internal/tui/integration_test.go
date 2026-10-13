@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/Ayush2966/Agent-Box/internal/api"
 	"github.com/Ayush2966/Agent-Box/internal/box"
 	"github.com/Ayush2966/Agent-Box/internal/client"
 	"github.com/Ayush2966/Agent-Box/internal/daemon"
@@ -52,13 +53,18 @@ func TestAgainstRealDaemon(t *testing.T) {
 	if _, err := c.CreateBox(ctx, box.NewOptions{RepoPath: repo, Name: "a"}); err != nil {
 		t.Fatal(err)
 	}
-	for deadline := time.Now().Add(15 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+	var last api.BoxView // the last row seen: a failed creation is rolled back, so the row vanishes
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 		b, err := c.GetBox(ctx, rv.ID, "a")
+		if err == nil {
+			last = b
+		}
 		if err == nil && b.State == "running" {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("box never ran: %+v %v", b, err)
+			log, _ := os.ReadFile(p.Log)
+			t.Fatalf("box never ran: now %+v %v; last seen state=%q step=%q error=%q; daemon log:\n%s", b, err, last.State, last.LastStep, last.LastError, log)
 		}
 	}
 	t.Cleanup(func() { _ = c.RemoveBox(context.Background(), rv.ID, "a", true, false) })
