@@ -87,6 +87,7 @@ func lockHome(path string) (*os.File, error) {
 type Settings struct {
 	PortRange []int  `yaml:"port_range"`
 	APIAddr   string `yaml:"api_addr"`
+	BoxesDir  string `yaml:"boxes_dir"` // where box worktrees live; "" = <home>/boxes
 }
 
 func LoadSettings(path string) (Settings, error) {
@@ -107,6 +108,20 @@ func LoadSettings(path string) (Settings, error) {
 	host, _, err := net.SplitHostPort(s.APIAddr)
 	if err != nil || !isLoopbackHost(host) {
 		return s, fmt.Errorf("%s: api_addr must be a loopback address such as 127.0.0.1:7777 (got %q); remote access is not supported", path, s.APIAddr)
+	}
+	if s.BoxesDir != "" {
+		d := s.BoxesDir
+		if d == "~" || strings.HasPrefix(d, "~/") {
+			uh, err := os.UserHomeDir()
+			if err != nil {
+				return s, fmt.Errorf("%s: boxes_dir: %w", path, err)
+			}
+			d = filepath.Join(uh, strings.TrimPrefix(d, "~"))
+		}
+		if !filepath.IsAbs(d) {
+			return s, fmt.Errorf("%s: boxes_dir must be an absolute path or start with ~/ (got %q)", path, s.BoxesDir)
+		}
+		s.BoxesDir = filepath.Clean(d)
 	}
 	return s, nil
 }
@@ -177,7 +192,7 @@ func Run(ctx context.Context, p Paths) error {
 		return fmt.Errorf("agentbox home %s is too long: its unix socket path is %d bytes and this OS allows %d; set AGENTBOX_HOME to a shorter path",
 			p.Home, len(p.Sock), max)
 	}
-	for _, d := range []string{p.Home, p.Logs, p.Boxes} {
+	for _, d := range []string{p.Home, p.Logs} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
 			return err
 		}
@@ -217,6 +232,13 @@ func Run(ctx context.Context, p Paths) error {
 	if err != nil {
 		return err
 	}
+	boxes := p.Boxes // the worktrees; boxes_dir moves them (only them) out of the home
+	if settings.BoxesDir != "" {
+		boxes = settings.BoxesDir
+	}
+	if err := os.MkdirAll(boxes, 0o700); err != nil {
+		return err
+	}
 	token, err := ensureToken(p.Token)
 	if err != nil {
 		return err
@@ -228,7 +250,7 @@ func Run(ctx context.Context, p Paths) error {
 	defer store.Close()
 
 	bus := events.NewBus()
-	m := box.NewManager(box.Deps{Store: store, BoxesDir: p.Boxes, LogsDir: p.Logs,
+	m := box.NewManager(box.Deps{Store: store, BoxesDir: boxes, LogsDir: p.Logs,
 		PortLo: settings.PortRange[0], PortHi: settings.PortRange[1], Bus: bus})
 	if err := m.Recover(); err != nil {
 		return err

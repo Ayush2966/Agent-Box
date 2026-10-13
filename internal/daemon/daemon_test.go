@@ -116,6 +116,83 @@ func TestLoadSettings(t *testing.T) {
 	if _, err := daemon.LoadSettings(bad); err == nil {
 		t.Fatal("inverted port range accepted")
 	}
+	if s.BoxesDir != "" {
+		t.Fatalf("boxes_dir defaults to the home's boxes dir (empty here), got %q", s.BoxesDir)
+	}
+	tilde := filepath.Join(dir, "tilde.yaml")
+	os.WriteFile(tilde, []byte("boxes_dir: ~/agentbox-boxes\n"), 0o600)
+	uh, _ := os.UserHomeDir()
+	if s, err := daemon.LoadSettings(tilde); err != nil || s.BoxesDir != filepath.Join(uh, "agentbox-boxes") {
+		t.Fatalf("~ not expanded: %q %v", s.BoxesDir, err)
+	}
+	rel := filepath.Join(dir, "rel.yaml")
+	os.WriteFile(rel, []byte("boxes_dir: boxes/here\n"), 0o600)
+	if _, err := daemon.LoadSettings(rel); err == nil || !strings.Contains(err.Error(), "boxes_dir") {
+		t.Fatalf("relative boxes_dir accepted: %v", err)
+	}
+}
+
+// boxes_dir in config.yaml moves the worktrees (and only them) out of the
+// agentbox home, e.g. somewhere visible like ~/Desktop.
+func TestRunPutsBoxesInBoxesDir(t *testing.T) {
+	home := tempHome(t)
+	p := daemon.PathsFor(home)
+	boxes := filepath.Join(home, "elsewhere", "my boxes")
+	os.WriteFile(p.Config, []byte("api_addr: 127.0.0.1:0\nboxes_dir: "+boxes+"\n"), 0o600)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errc := make(chan error, 1)
+	go func() { errc <- daemon.Run(ctx, p) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for !daemon.Ping(p.Sock) {
+		if time.Now().After(deadline) {
+			t.Fatal("daemon never came up")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	c := client.New(p.Sock)
+	repo := testutil.NewRepo(t, map[string]string{"agentbox.yaml": "version: 1\n"})
+	rv, err := c.ResolveRepo(ctx, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evs, err := c.Events(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.CreateBox(ctx, box.NewOptions{RepoPath: repo, Name: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	for ev := range evs {
+		if ev.Type == "box.state" && ev.Data["state"] == "ready" {
+			break
+		}
+	}
+	bv, err := c.GetBox(ctx, rv.ID, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	real, err := filepath.EvalSymlinks(boxes) // the manager keeps paths symlink-resolved (/tmp → /private/tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(real, rv.ID, "a")
+	if bv.Dir != want {
+		t.Fatalf("box dir %q, want %q", bv.Dir, want)
+	}
+	if _, err := os.Stat(filepath.Join(want, "agentbox.yaml")); err != nil {
+		t.Fatalf("worktree not at boxes_dir: %v", err)
+	}
+	if _, err := os.Stat(p.Boxes); !os.IsNotExist(err) {
+		t.Fatalf("the home's boxes dir was still created: %v", err)
+	}
+	if err := c.RemoveBox(ctx, rv.ID, "a", false, false); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	if err := <-errc; err != nil {
+		t.Fatal(err)
+	}
 }
 
 // Two daemons racing to own the same AGENTBOX_HOME must not both bind: the

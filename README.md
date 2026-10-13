@@ -98,6 +98,19 @@ rather than redirecting to `http://localhost:3000`.
 
 `api_addr` in `~/.agentbox/config.yaml` must be a loopback address (`127.0.0.1:7777`, `localhost:7777`, `[::1]:7777`); the proxy and dashboard have no remote access, and a wildcard or LAN address is rejected at startup.
 
+## Where boxes live
+
+Worktrees go under `~/.agentbox/boxes/<repo>-<hash>/<box>/`, never inside the repo. To keep them
+somewhere visible, set `boxes_dir` in `~/.agentbox/config.yaml` (absolute, or `~/…`) and restart the
+daemon (`agentbox daemon restart`):
+
+```yaml
+boxes_dir: ~/Desktop/agentbox-boxes
+```
+
+Only new boxes land there; existing ones stay where they were created (their paths are stored).
+The daemon's own state, logs and token stay in `~/.agentbox`.
+
 ## Docker Compose services
 
 If your dev environment is `docker compose up`, add `compose:` to `agentbox.yaml`. Every box gets its
