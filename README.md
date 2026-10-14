@@ -16,8 +16,11 @@ c     running  APP_PORT=20002  myapp_agentbox_c  0      3
 
 ## Install
 
-    go install github.com/Ayush2966/Agent-Box/cmd/agentbox@latest
-    # or: brew install Ayush2966/tap/agentbox
+    brew tap Ayush2966/tap
+    brew install agentbox                  # the CLI
+    brew install --cask agentbox-desktop   # the macOS app (optional)
+
+or `go install github.com/Ayush2966/Agent-Box/cmd/agentbox@latest`.
 
 `go install` builds without the dashboard (everything else works; `agentbox ui` says so). Release
 binaries include it. From a checkout: `make build` (needs Node 20+).
@@ -209,7 +212,7 @@ rejects the flag). See `examples/node-mysql`.
 
 ## Desktop app
 
-    brew install --cask Ayush2966/tap/agentbox-desktop
+    brew tap Ayush2966/tap && brew install --cask agentbox-desktop
 
 or download `Agentbox-<version>-macos-universal.zip` (Apple silicon + Intel) from a release, unzip,
 and drop `Agentbox.app` into Applications. It starts the daemon itself and opens signed in; box links
