@@ -1,6 +1,6 @@
 import { useMemo, useSyncExternalStore } from 'react'
 
-export type Route = { kind: 'home' } | { kind: 'repo'; repo: string } | { kind: 'box'; repo: string; name: string }
+export type Route = { kind: 'home' } | { kind: 'all'; q?: string } | { kind: 'repo'; repo: string } | { kind: 'box'; repo: string; name: string }
 
 function decode(segment: string): string {
   try {
@@ -16,6 +16,7 @@ export function parseRoute(hash: string): Route {
     .split('/')
     .filter(Boolean)
     .map(decode)
+  if (parts[0] === 'all') return parts[1] ? { kind: 'all', q: parts[1] } : { kind: 'all' }
   if (parts[0] === 'r' && parts[1]) {
     if (parts[2] === 'b' && parts[3]) return { kind: 'box', repo: parts[1], name: parts[3] }
     return { kind: 'repo', repo: parts[1] }
@@ -27,6 +28,8 @@ export function formatRoute(r: Route): string {
   switch (r.kind) {
     case 'home':
       return '#/'
+    case 'all':
+      return r.q ? `#/all/${encodeURIComponent(r.q)}` : '#/all'
     case 'repo':
       return `#/r/${encodeURIComponent(r.repo)}`
     case 'box':

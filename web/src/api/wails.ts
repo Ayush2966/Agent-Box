@@ -4,6 +4,8 @@ export interface WailsRuntime {
   /** Like EventsOn, but the runtime drops the listener after its first call. */
   EventsOnce(name: string, cb: (data: unknown) => void): () => void
   BrowserOpenURL(url: string): void
+  /** Wails ≥ 2.4; optional so an older runtime falls back to the Clipboard API. */
+  ClipboardSetText?(text: string): Promise<void>
 }
 
 export interface WailsApp {

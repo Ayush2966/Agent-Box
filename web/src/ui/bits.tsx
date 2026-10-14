@@ -1,5 +1,7 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { copyText } from '../api/clipboard'
 import { wails } from '../api/wails'
+import { toasts } from '../store/toasts'
 
 export function StatePill({ state }: { state: string }) {
   return <span className={`pill pill-${state}`}>{state}</span>
@@ -30,6 +32,31 @@ export function useKey(key: string, fn: () => void, enabled = true) {
     addEventListener('keydown', h)
     return () => removeEventListener('keydown', h)
   }, [key, fn, enabled])
+}
+
+/** A button that copies `text` and says so for a moment. */
+export function CopyButton({ text, label = 'Copy', className = '', title }: { text: string; label?: string; className?: string; title?: string }) {
+  const [done, setDone] = useState(false)
+  useEffect(() => {
+    if (!done) return
+    const t = setTimeout(() => setDone(false), 1500)
+    return () => clearTimeout(t)
+  }, [done])
+  return (
+    <button
+      type="button"
+      className={`copy-btn ${done ? 'copied' : ''} ${className}`}
+      title={title ?? `Copy ${text}`}
+      aria-live="polite"
+      onClick={() => {
+        copyText(text)
+          .then(() => setDone(true))
+          .catch(toasts.error)
+      }}
+    >
+      {done ? 'Copied ✓' : label}
+    </button>
+  )
 }
 
 export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
@@ -74,11 +101,12 @@ export function openExternal(url: string) {
 }
 
 /** An anchor that opens outside the app window. */
-export function ExternalLink({ href, className, children }: { href: string; className?: string; children: ReactNode }) {
+export function ExternalLink({ href, className, children, title }: { href: string; className?: string; children: ReactNode; title?: string }) {
   return (
     <a
       className={className}
       href={href}
+      title={title}
       target="_blank"
       rel="noreferrer"
       onClick={(e) => {
