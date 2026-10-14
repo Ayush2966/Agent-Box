@@ -35,6 +35,52 @@ macOS and Linux. Needs git ≥ 2.38, plus pg_dump/pg_restore for Postgres, mysql
     agentbox merge feature-x
     agentbox rm feature-x
 
+## Step by step
+
+1. **Install** the CLI (above) and, on macOS, optionally the app: `brew install --cask Ayush2966/tap/agentbox-desktop`.
+   The daemon starts itself on the first command; nothing to run by hand.
+
+2. **Describe the repo once.** In the repo root, `agentbox init` drafts `agentbox.yaml` from `package.json` and
+   friends. Fix three things before the first box:
+   - `setup`: the command that makes a fresh checkout runnable. Use what works in *this* repo: `npm ci`,
+     `npm ci --legacy-peer-deps` when `npm install` fails on peer ranges, `go mod download`, `pip install -e .`.
+   - `dev`: the command that starts the dev server **on the port agentbox hands out** (next point).
+   - `ports`: the env var names your app reads its ports from, e.g. `[APP_PORT]`.
+
+3. **Make the app take its port from the env.** Every box gets different ports; a hard-coded one means the
+   second box fails. Both `setup` and `dev` run through `sh -c` with the box's env, so the command line can
+   pass it on without touching the code:
+   - webpack: `dev: npm start -- --port "$APP_PORT"` (the flag overrides `devServer.port`)
+   - Vite: `dev: npm run dev -- --port "$APP_PORT" --strictPort`
+   - Express/Node: `app.listen(process.env.APP_PORT || 3000)`
+   - Go: `flag` or `os.Getenv("APP_PORT")`
+   - Docker Compose: `"${REDIS_PORT}:6379"` in the compose file and `REDIS_PORT` under `ports:`
+
+4. **Keep secrets and local overrides working.** The box's env file (`env.file`, default `.env`) is written
+   from `env.template` plus agentbox's own vars (`APP_PORT`, `DATABASE_URL`, `AGENTBOX_NAME`, `AGENTBOX_ROOT`).
+   If your app loads a git-ignored `.env.local`, point both at it so the tracked `.env` stays untouched in the box:
+
+   ```yaml
+   env: { template: .env.local, file: .env.local }
+   ```
+
+   Other untracked files a box needs (`.npmrc` with a token, certificates) go under `copy:`.
+
+5. **Create a box and hand it to the agent.** `agentbox new feature-x` creates the worktree (branch
+   `agentbox/feature-x`, cut from your current HEAD, so commit what the box must see), allocates ports, copies the
+   database, runs `setup`, starts `dev`, and prints the directory. Start your agent there:
+   `cd ~/.agentbox/boxes/<repo>/feature-x` (or wherever `boxes_dir` points). The app answers at
+   `http://feature-x.localhost:7777/` in Chrome, Firefox and Edge.
+
+6. **Watch, intervene, finish.** `agentbox ui` or `agentbox tui` show every box live: state, logs, diff,
+   ahead/dirty counts. `agentbox exec feature-x -- npm test` runs in the box's env; `agentbox logs feature-x -f`
+   tails setup and dev output. When the work is good, `agentbox merge feature-x` merges the branch into your main
+   checkout's current branch (never force); `agentbox rm feature-x` stops everything, drops the database copy,
+   frees the ports and deletes the worktree, asking first if uncommitted work would be lost.
+
+If `agentbox new` fails in `setup`, the box is rolled back and the last lines of output are printed; fix the
+`setup` command and run `new` again (`--keep-failed` keeps the half-built box for a look).
+
 ## Configuration
 
 `agentbox.yaml` at the repo root (read from your main checkout, so uncommitted edits apply):
@@ -97,6 +143,33 @@ resolver, which does not: use `curl -H 'Host: a.localhost' http://127.0.0.1:7777
 rather than redirecting to `http://localhost:3000`.
 
 `api_addr` in `~/.agentbox/config.yaml` must be a loopback address (`127.0.0.1:7777`, `localhost:7777`, `[::1]:7777`); the proxy and dashboard have no remote access, and a wildcard or LAN address is rejected at startup.
+
+## One feature across several repos
+
+A box is one repo's worktree. For a feature that spans repos, create a box with the same name in each repo:
+
+    for r in api-admin api-unified web-panel; do agentbox --repo ~/code/$r new nvo-9743; done
+
+Each repo needs its own `agentbox.yaml`; the dashboard lists every repo, and `tui` cycles them with `r`.
+Finish the same way: `merge` and `rm` in each repo.
+
+Wiring the boxes to each other:
+
+- **Browser → API.** When a name is used in more than one repo, each box's URL is qualified:
+  `http://nvo-9743.<repo-id>.localhost:7777` (`<repo-id>` is the box's folder name, e.g. `api-admin-1a2b3c`).
+  Every box knows its own name as `AGENTBOX_NAME`, and `dev` runs through a shell, so the frontend can point
+  at the backend box of the same name without any code change:
+
+  ```yaml
+  dev: REACT_APP_API_URL="http://$AGENTBOX_NAME.api-admin-1a2b3c.localhost:7777" npm start -- --port "$APP_PORT"
+  ```
+
+- **Server → server.** The system resolver (and so Go, Node and curl) does not resolve `*.localhost` on macOS:
+  call the other box's port directly (`agentbox --repo ~/code/api-admin ls --json` shows it) or add
+  `127.0.0.1 nvo-9743.api-admin-1a2b3c.localhost` to `/etc/hosts` and use the proxy URL.
+
+- **Shared backends.** If the frontends are what the agents change, leave the backends on a shared dev
+  environment and create boxes only in the frontend repos.
 
 ## Where boxes live
 
