@@ -6,7 +6,7 @@ import { toasts } from '../store/toasts'
 import { DiffView } from './DiffView'
 import { LogView } from './LogView'
 import { RunButtons } from './RunButtons'
-import { ExternalLink, StatePill, formatPorts } from './bits'
+import { CopyButton, ExternalLink, StatePill, formatPorts } from './bits'
 import { ConfirmDialog } from './confirm'
 
 type Tab = 'overview' | 'logs' | 'diff' | 'danger'
@@ -39,15 +39,16 @@ export function BoxPage({ repo, name, onBack }: { repo: string; name: string; on
   return (
     <section className="page">
       <header className="page-head">
-        <button className="quiet" onClick={onBack}>
+        <button className="quiet back" onClick={onBack}>
           ← boxes
         </button>
         <h1 className="mono">{box.name}</h1>
         <StatePill state={box.state} />
         {state.steps[id] && <span className="muted">{state.steps[id]}…</span>}
         <span className="spacer" />
+        <CopyButton text={box.dir} label="Copy path" title={`Copy ${box.dir}`} />
         {box.url && (
-          <ExternalLink className="button" href={box.url}>
+          <ExternalLink className="button" href={box.url} title="Opens in your browser">
             Open app ↗
           </ExternalLink>
         )}
@@ -90,21 +91,43 @@ function Overview({ box }: { box: BoxView }) {
   ]
   if (box.last_error) rows.push(['last error', <span className="error">{box.last_error}</span>])
   const env = Object.entries(box.env ?? {}).sort(([a], [b]) => a.localeCompare(b))
+  const cd = `cd ${JSON.stringify(box.dir)}`
   return (
     <div className="stack">
-      <dl className="facts">
-        {rows.map(([k, v]) => (
-          <Fragment key={k}>
-            <dt>{k}</dt>
-            <dd>{v}</dd>
-          </Fragment>
-        ))}
-      </dl>
-      <h3>Point your agent at it</h3>
-      <pre className="copy">cd {JSON.stringify(box.dir)}</pre>
+      <section className="card agent-card">
+        <div className="row">
+          <h3>Point your agent here</h3>
+          <span className="spacer" />
+          <CopyButton text={cd} label="Copy cd command" />
+          <CopyButton text={box.dir} label="Copy path" />
+        </div>
+        <pre className="copy block">{cd}</pre>
+        <p className="muted small">
+          Its own worktree on <code>{box.branch}</code>
+          {box.base ? <> from <code>{box.base}</code></> : null}
+          {box.url ? (
+            <>
+              ; the app answers at <ExternalLink href={box.url}>{box.url}</ExternalLink>
+            </>
+          ) : null}
+          .
+        </p>
+      </section>
+      <section className="card">
+        <h3>Details</h3>
+        <dl className="facts">
+          {rows.map(([k, v]) => (
+            <Fragment key={k}>
+              <dt>{k}</dt>
+              <dd>{v}</dd>
+            </Fragment>
+          ))}
+        </dl>
+      </section>
       {env.length > 0 && (
-        <>
+        <section className="card">
           <h3>Managed env</h3>
+          <p className="muted small">Written into the box's env file and exported to its setup and dev commands.</p>
           <table className="env">
             <tbody>
               {env.map(([k, v]) => (
@@ -117,7 +140,7 @@ function Overview({ box }: { box: BoxView }) {
               ))}
             </tbody>
           </table>
-        </>
+        </section>
       )}
     </div>
   )

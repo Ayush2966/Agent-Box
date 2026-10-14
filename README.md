@@ -51,7 +51,8 @@ macOS and Linux. Needs git ≥ 2.38, plus pg_dump/pg_restore for Postgres, mysql
    second box fails. Both `setup` and `dev` run through `sh -c` with the box's env, so the command line can
    pass it on without touching the code:
    - webpack: `dev: npm start -- --port "$APP_PORT"` (the flag overrides `devServer.port`)
-   - Vite: `dev: npm run dev -- --port "$APP_PORT" --strictPort`
+   - Vite: `dev: npm run dev -- --host 127.0.0.1 --port "$APP_PORT" --strictPort` (without `--host`, Vite on
+     recent Node binds only `[::1]`, and the proxy dials `127.0.0.1`)
    - Express/Node: `app.listen(process.env.APP_PORT || 3000)`
    - Go: `flag` or `os.Getenv("APP_PORT")`
    - Docker Compose: `"${REDIS_PORT}:6379"` in the compose file and `REDIS_PORT` under `ports:`
@@ -125,8 +126,12 @@ Your app must read its ports from these env vars. Boxes can't share a hard-coded
 
 ## Dashboard and box URLs
 
-`agentbox ui` opens `http://127.0.0.1:7777/ui/`, signed in via a one-time link, and shows every repo
-and box live: state, logs, diff, doctor, and the same create/start/stop/merge/remove actions as the CLI.
+`agentbox ui` opens `http://127.0.0.1:7777/ui/`, signed in via a one-time link. Repos sit in the left
+sidebar, grouped by their parent folder, with a dot for running or failed boxes; pick one to see its boxes
+live (state, URL, git ahead/behind/dirty), copy a box's path for your agent, and use the same
+create/start/stop/merge/remove actions as the CLI. **All boxes** at the top of the sidebar lists every box
+across repos in one table, with a filter. **New box** (`n`) can tick other repos to create the same-named
+box in each of them at once.
 
 `agentbox tui` is the terminal version: a live table of every box (`r` cycles repos, `/` filters),
 `enter` for a box's overview, logs and diff, `s`/`x`/`m` to start-stop, remove and merge, `e` to open
@@ -150,8 +155,9 @@ A box is one repo's worktree. For a feature that spans repos, create a box with 
 
     for r in api-admin api-unified web-panel; do agentbox --repo ~/code/$r new nvo-9743; done
 
-Each repo needs its own `agentbox.yaml`; the dashboard lists every repo, and `tui` cycles them with `r`.
-Finish the same way: `merge` and `rm` in each repo.
+Each repo needs its own `agentbox.yaml`. In the dashboard, **New box** has a checklist of the other repos:
+tick them and the same box is created in each; **All boxes** then shows them side by side. `tui` cycles
+repos with `r`. Finish the same way: `merge` and `rm` in each repo.
 
 Wiring the boxes to each other:
 

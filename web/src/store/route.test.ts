@@ -5,6 +5,8 @@ describe('routes', () => {
   it('round-trips every route kind', () => {
     const routes: Route[] = [
       { kind: 'home' },
+      { kind: 'all' },
+      { kind: 'all', q: 'nvo-9743' },
       { kind: 'repo', repo: 'myapp-1a2b3c' },
       { kind: 'box', repo: 'myapp-1a2b3c', name: 'feature-x' },
     ]
