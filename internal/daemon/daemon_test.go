@@ -125,6 +125,14 @@ func TestLoadSettings(t *testing.T) {
 	if s, err := daemon.LoadSettings(tilde); err != nil || s.BoxesDir != filepath.Join(uh, "agentbox-boxes") {
 		t.Fatalf("~ not expanded: %q %v", s.BoxesDir, err)
 	}
+	if !s.Notify() {
+		t.Fatal("notifications default on")
+	}
+	off := filepath.Join(dir, "off.yaml")
+	os.WriteFile(off, []byte("notifications: false\n"), 0o600)
+	if s, err := daemon.LoadSettings(off); err != nil || s.Notify() {
+		t.Fatalf("notifications: false not honoured: %+v %v", s, err)
+	}
 	rel := filepath.Join(dir, "rel.yaml")
 	os.WriteFile(rel, []byte("boxes_dir: boxes/here\n"), 0o600)
 	if _, err := daemon.LoadSettings(rel); err == nil || !strings.Contains(err.Error(), "boxes_dir") {

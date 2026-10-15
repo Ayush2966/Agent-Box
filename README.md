@@ -161,6 +161,10 @@ use: a command on PATH (`code`, `cursor`, `zed`, …) or on macOS an app name (`
 it, the first of code, cursor, windsurf, zed, subl and idea found on PATH. `terminal:` likewise picks the
 terminal app (macOS default: Terminal).
 
+The daemon sends a desktop notification when a box's dev server keeps crashing, when a creation fails or
+is rolled back, and when a box you created is ready (macOS via `osascript`, Linux via `notify-send`), so
+an agent's box can be left alone. `notifications: false` in `~/.agentbox/config.yaml` turns them off.
+
 `api_addr` in `~/.agentbox/config.yaml` must be a loopback address (`127.0.0.1:7777`, `localhost:7777`, `[::1]:7777`); the proxy and dashboard have no remote access, and a wildcard or LAN address is rejected at startup.
 
 ## One feature across several repos

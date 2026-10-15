@@ -642,13 +642,15 @@ func (m *Manager) saveRunning(b state.Box, p *proc.Proc) (state.Box, error) {
 	if err := m.d.Store.UpdateBox(b); err != nil {
 		return b, err
 	}
+	var extra map[string]any
 	if st := p.Status(); st.GaveUp {
 		b.State, b.PID, b.LastError = state.Stopped, 0, st.LastError
 		if err := m.d.Store.UpdateBox(b); err != nil {
 			return b, err
 		}
+		extra = map[string]any{"reason": "crashed"}
 	}
-	m.publish(events.BoxState, b, nil)
+	m.publish(events.BoxState, b, extra)
 	return b, nil
 }
 
@@ -662,14 +664,16 @@ func (m *Manager) onProcChange(repoID, name string, s proc.Status) {
 	if s.LastError != "" {
 		b.LastError = s.LastError
 	}
+	var extra map[string]any
 	if s.GaveUp {
 		b.State, b.PID = state.Stopped, 0
+		extra = map[string]any{"reason": "crashed"} // tells a crash loop from `agentbox stop`
 	}
 	if err := m.d.Store.UpdateBox(b); err != nil {
 		slog.Warn("update box after process change", "box", b.ID(), "err", err)
 		return
 	}
-	m.publish(events.BoxState, b, nil)
+	m.publish(events.BoxState, b, extra)
 }
 
 type undoStack []func() error
