@@ -21,6 +21,9 @@ func TestOpenLaunchesEditorTerminalAndFiles(t *testing.T) {
 		return nil
 	}
 	m.d.Editor = "sh" // something certainly on PATH
+	if runtime.GOOS != "darwin" {
+		m.d.Terminal = "sh" // Linux CI has no terminal emulator; the configured command is enough
+	}
 	repo := newSQLiteRepo(t, sqliteConfig)
 	b, err := m.New(ctx, NewOptions{RepoPath: repo, Name: "a", NoDev: true})
 	if err != nil {
