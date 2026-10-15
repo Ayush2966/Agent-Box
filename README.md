@@ -152,6 +152,8 @@ create/start/stop/merge/remove actions as the CLI. **All boxes** at the top of t
 across repos in one table, with a filter. **New box** (`n`) can tick other repos to create the same-named
 box in each of them at once.
 
+The Logs tab streams live and has a filter box and an "errors only" toggle.
+
 `agentbox tui` is the terminal version: a live table of every box (`r` cycles repos, `/` filters),
 `enter` for a box's overview, logs and diff, `s`/`x`/`m` to start-stop, remove and merge, `e` to open
 a shell inside the box with its env, `o` to open its URL, `d` for doctor, `?` for every key.

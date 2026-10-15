@@ -200,6 +200,7 @@ label.inline { display: inline-flex; align-items: center; gap: 0.4rem; }
 
 /* Logs and diff */
 .logs .row { margin-bottom: 0.5rem; }
+.log-filter { max-width: 16rem; }
 pre.log { margin: 0; height: 60vh; overflow: auto; background: #0b0d12; color: #d7dbe0; padding: 0.75rem; border-radius: var(--radius); font-size: 0.82rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 pre.diff-body { margin: 0.75rem 0 0; max-height: 70vh; overflow: auto; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 0.5rem 0; font-size: 0.82rem; }
 pre.diff-body span { display: block; padding: 0 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere; }
