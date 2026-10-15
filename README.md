@@ -104,7 +104,7 @@ dev: npm run dev              # supervised; restarted with backoff if it crashes
 ports: [APP_PORT, API_PORT]   # each gets a free port per box
 proxy: APP_PORT               # which port http://<box>.localhost:7777 forwards to (default: the first)
 db:
-  driver: postgres            # postgres | mysql | sqlite
+  driver: postgres            # postgres | mysql | mongo | sqlite
   url_env: DATABASE_URL
   source: postgres://localhost:5432/myapp
 compose:                      # optional: a Docker Compose project per box
@@ -242,6 +242,12 @@ The `db.source` user needs `CREATE` and `DROP` globally plus read access to the 
 `SHOW VIEW`, `TRIGGER`, `EVENT`; routines need `SHOW_ROUTINE` on MySQL 8.0.20 and later). When the server
 has GTIDs on, the dump is taken with `--set-gtid-purged=OFF`, which needs MySQL's own `mysqldump` (MariaDB's
 rejects the flag). See `examples/node-mysql`.
+
+MongoDB works the same way: `driver: mongo`, a `mongodb://` or `mongodb+srv://` source with the database
+in the path, and `mongodump`/`mongorestore` on PATH. Each box gets `<db>_agentbox_<box>`, dumped from the
+source and renamed on restore (`--nsFrom`/`--nsTo`); `db.url_env` receives a URL with the clone's name.
+The `db.source` user needs to read the source database and create and drop the box databases. Works with a
+local server or an Atlas cluster (its Mongo is reachable from a laptop).
 
 ## Desktop app
 

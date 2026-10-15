@@ -202,9 +202,9 @@ func (c *Config) validate() error {
 	}
 	if c.DB != nil {
 		switch c.DB.Driver {
-		case "postgres", "sqlite", "mysql":
+		case "postgres", "sqlite", "mysql", "mongo", "mongodb":
 		default:
-			return fmt.Errorf(`%s: db.driver must be "postgres", "mysql" or "sqlite" (got %q)`, FileName, c.DB.Driver)
+			return fmt.Errorf(`%s: db.driver must be "postgres", "mysql", "mongo" or "sqlite" (got %q)`, FileName, c.DB.Driver)
 		}
 		if !envName.MatchString(c.DB.URLEnv) {
 			return fmt.Errorf("%s: db.url_env must be a valid env var name (got %q)", FileName, c.DB.URLEnv)
@@ -224,6 +224,12 @@ func (c *Config) validate() error {
 			u, err := url.Parse(c.DB.Source)
 			if err != nil || (u.Scheme != "mysql" && u.Scheme != "mariadb") || u.Host == "" || len(strings.Trim(u.Path, "/")) == 0 {
 				return fmt.Errorf("%s: db.source for mysql must look like mysql://user:pass@host:3306/database (got %q)", FileName, c.DB.Source)
+			}
+		}
+		if c.DB.Driver == "mongo" || c.DB.Driver == "mongodb" {
+			u, err := url.Parse(c.DB.Source)
+			if err != nil || (u.Scheme != "mongodb" && u.Scheme != "mongodb+srv") || u.Host == "" || len(strings.Trim(u.Path, "/")) == 0 {
+				return fmt.Errorf("%s: db.source for mongo must look like mongodb://user:pass@host:27017/database (got %q)", FileName, c.DB.Source)
 			}
 		}
 	}

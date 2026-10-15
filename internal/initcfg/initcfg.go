@@ -22,7 +22,7 @@ type Result struct {
 
 var (
 	portKey       = regexp.MustCompile(`(^|_)PORT$`)
-	dbKey         = regexp.MustCompile(`^(DATABASE_URL|DB_URL|POSTGRES_URL|DATABASE_PATH|SQLITE_PATH)$`)
+	dbKey         = regexp.MustCompile(`^(DATABASE_URL|DB_URL|POSTGRES_URL|DATABASE_PATH|SQLITE_PATH|MONGO_URI|MONGODB_URI|MONGO_URL|MONGODB_URL)$`)
 	fixedHostPort = regexp.MustCompile(`"?\b(\d{2,5}):(\d{2,5})\b"?`)
 	containerName = regexp.MustCompile(`(?m)^\s*container_name:`)
 	hardPort      = regexp.MustCompile(`(--port[ =]|-p ?|PORT=)\d{2,5}`)
@@ -53,6 +53,8 @@ func driverOf(v string) string {
 		return "postgres"
 	case strings.HasPrefix(v, "mysql://"), strings.HasPrefix(v, "mariadb://"):
 		return "mysql"
+	case strings.HasPrefix(v, "mongodb://"), strings.HasPrefix(v, "mongodb+srv://"):
+		return "mongo"
 	case strings.HasPrefix(v, "file:"), strings.HasSuffix(v, ".db"), strings.HasSuffix(v, ".sqlite"), strings.HasSuffix(v, ".sqlite3"):
 		return "sqlite"
 	}
