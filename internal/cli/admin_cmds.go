@@ -94,6 +94,54 @@ behind, so it runs in CI: agentbox check --setup --dev 60s`,
 	return cmd
 }
 
+// pruneCmd removes stopped and failed boxes in one go.
+func (a *app) pruneCmd() *cobra.Command {
+	var all, force bool
+	cmd := &cobra.Command{
+		Use:   "prune",
+		Short: "Remove stopped and failed boxes (this repo, or --all repos)",
+		Args:  exactArgs(0, "no arguments"),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			ctx, out := cmd.Context(), cmd.OutOrStdout()
+			if err := a.connect(); err != nil {
+				return err
+			}
+			repoID := ""
+			if !all {
+				p, err := a.repoPath()
+				if err != nil {
+					return err
+				}
+				repo, err := a.c.ResolveRepo(ctx, p)
+				if err != nil {
+					return err
+				}
+				repoID = repo.ID
+			}
+			res, err := a.c.Prune(ctx, repoID, force)
+			if err != nil {
+				return err
+			}
+			removed := 0
+			for _, r := range res {
+				if r.Removed {
+					removed++
+					fmt.Fprintf(out, "removed %s\n", r.Name)
+				} else {
+					fmt.Fprintf(out, "kept %s: %s\n", r.Name, r.Error)
+				}
+			}
+			if removed == 0 && len(res) == 0 {
+				fmt.Fprintln(out, "no stopped or failed boxes")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&all, "all", false, "across every repo, not just this one")
+	cmd.Flags().BoolVar(&force, "force", false, "discard uncommitted or unmerged work")
+	return cmd
+}
+
 func (a *app) dbCmd() *cobra.Command {
 	cmd := &cobra.Command{Use: "db", Short: "Database commands"}
 	var terminate bool

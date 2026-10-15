@@ -7,9 +7,10 @@ interface Props {
   onNew: () => void
   onDoctor: () => void
   onRefreshDB: () => void
+  onPrune: () => void
 }
 
-export function RepoHeader({ repo, onNew, onDoctor, onRefreshDB }: Props) {
+export function RepoHeader({ repo, onNew, onDoctor, onRefreshDB, onPrune }: Props) {
   return (
     <header className="repo-head">
       <div className="repo-title">
@@ -26,6 +27,9 @@ export function RepoHeader({ repo, onNew, onDoctor, onRefreshDB }: Props) {
         </button>
         <button onClick={onRefreshDB} title="Re-snapshot the source database for new boxes">
           Refresh DB
+        </button>
+        <button onClick={onPrune} title="Remove this repo's stopped and failed boxes">
+          Prune
         </button>
         <button className="primary" onClick={onNew}>
           New box <kbd>n</kbd>

@@ -87,7 +87,7 @@ func newRoot() *cobra.Command {
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error { return usage(err) })
 	root.AddCommand(
 		a.initCmd(), a.checkCmd(), a.newCmd(), a.prCmd(), a.openCmd(), a.lsCmd(), a.logsCmd(), a.startCmd(), a.stopCmd(), a.execCmd(),
-		a.mergeCmd(), a.rmCmd(), a.dbCmd(), a.doctorCmd(), a.uiCmd(), a.tuiCmd(), a.daemonCmd(), versionCmd(),
+		a.mergeCmd(), a.rmCmd(), a.pruneCmd(), a.dbCmd(), a.doctorCmd(), a.uiCmd(), a.tuiCmd(), a.daemonCmd(), versionCmd(),
 	)
 	return root
 }

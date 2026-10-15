@@ -81,3 +81,17 @@ type OpenRequest struct {
 type OpenResult struct {
 	Launched string `json:"launched"` // the program or app that was started
 }
+
+type DiskUsage struct {
+	Bytes int64 `json:"bytes"`
+}
+
+// PruneRequest removes stopped and failed boxes in Repo ("" = all repos).
+type PruneRequest struct {
+	Repo  string `json:"repo,omitempty"`
+	Force bool   `json:"force,omitempty"`
+}
+
+type PruneResponse struct {
+	Pruned []box.PruneResult `json:"pruned"`
+}

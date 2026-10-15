@@ -49,8 +49,10 @@ func (s *Server) Handler(requireToken bool) http.Handler {
 	mux.HandleFunc("POST "+b+"/merge", s.mergeBox)
 	mux.HandleFunc("DELETE "+b, s.removeBox)
 	mux.HandleFunc("GET "+b+"/logs", s.logs)
+	mux.HandleFunc("GET "+b+"/disk", s.diskUsage)
 	mux.HandleFunc("GET "+b+"/diff", s.diff)
 	mux.HandleFunc("POST /v1/repos/{repo}/db/refresh", s.refreshDB)
+	mux.HandleFunc("POST /v1/prune", s.prune)
 	mux.HandleFunc("GET /v1/repos/{repo}/doctor", s.doctor(false))
 	mux.HandleFunc("POST /v1/repos/{repo}/doctor", s.doctor(true))
 	mux.HandleFunc("GET /v1/events", s.events)
@@ -227,6 +229,31 @@ func (s *Server) openBox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, OpenResult{Launched: launched})
+}
+
+// diskUsage reports the box's size on disk; it walks the worktree, so it is a
+// request of its own, never part of listing boxes.
+func (s *Server) diskUsage(w http.ResponseWriter, r *http.Request) {
+	n, err := s.M.DiskUsage(r.PathValue("repo"), r.PathValue("name"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, DiskUsage{Bytes: n})
+}
+
+// prune removes every stopped or failed box (in one repo, or all of them).
+func (s *Server) prune(w http.ResponseWriter, r *http.Request) {
+	var req PruneRequest
+	if r.ContentLength != 0 && !decode(w, r, &req) {
+		return
+	}
+	res, err := s.M.Prune(r.Context(), req.Repo, req.Force)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, PruneResponse{Pruned: res})
 }
 
 func (s *Server) stopBox(w http.ResponseWriter, r *http.Request) {

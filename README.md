@@ -137,6 +137,7 @@ Your app must read its ports from these env vars. Boxes can't share a hard-coded
 | `open <name> [--terminal\|--files]` | open the box in your editor (or a terminal / the file manager) |
 | `merge <name> [--squash]` | merge into the main checkout's current branch (never forces) |
 | `rm <name> [--force] [--keep-branch]` | remove; asks before discarding work |
+| `prune [--all] [--force]` | remove the stopped and failed boxes (this repo, or every repo) |
 | `db refresh` | re-snapshot the source database |
 | `doctor [--fix]` | find and safely repair drift |
 | `ui [--no-open]` | open the web dashboard (signed in) |

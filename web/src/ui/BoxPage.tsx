@@ -69,6 +69,38 @@ export function BoxPage({ repo, name, onBack }: { repo: string; name: string; on
   )
 }
 
+function humanBytes(n: number): string {
+  const u = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  while (n >= 1024 && i < u.length - 1) {
+    n /= 1024
+    i++
+  }
+  return `${n.toFixed(i === 0 ? 0 : 1)} ${u[i]}`
+}
+
+function DiskUsage({ box }: { box: BoxView }) {
+  const [size, setSize] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+  if (size !== null) return <>{humanBytes(size)}</>
+  return (
+    <button
+      className="quiet small"
+      disabled={busy}
+      onClick={() => {
+        setBusy(true)
+        api
+          .disk(box.repo, box.name)
+          .then((d) => setSize(d.bytes))
+          .catch(toasts.error)
+          .finally(() => setBusy(false))
+      }}
+    >
+      {busy ? 'measuring…' : 'measure'}
+    </button>
+  )
+}
+
 function Overview({ box }: { box: BoxView }) {
   const rows: [string, ReactNode][] = [
     ['dir', <code>{box.dir}</code>],
@@ -86,6 +118,7 @@ function Overview({ box }: { box: BoxView }) {
       ),
     ],
     ['database', box.db_name ?? '—'],
+    ['disk', <DiskUsage box={box} />],
     ['pid', box.pid ?? '—'],
     ['created', new Date(box.created_at).toLocaleString()],
   ]
