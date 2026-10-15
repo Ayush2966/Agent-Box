@@ -106,6 +106,9 @@ env:
   template: .env.example      # copied and rewritten into the box's .env
   set: { NODE_ENV: development }
 copy: [.env.local]            # untracked files to copy from your main checkout
+links:                        # optional: the same-named box in another repo (see below)
+  API_URL: api-admin          #   http://<box>.<repo-id>.localhost:7777/  (for the browser)
+  API_ADDR: api-admin:addr    #   127.0.0.1:<its port>                     (for server-to-server)
 ```
 
 Your app must read its ports from these env vars. Boxes can't share a hard-coded port.
@@ -162,20 +165,30 @@ Each repo needs its own `agentbox.yaml`. In the dashboard, **New box** has a che
 tick them and the same box is created in each; **All boxes** then shows them side by side. `tui` cycles
 repos with `r`. Finish the same way: `merge` and `rm` in each repo.
 
-Wiring the boxes to each other:
+Wiring the boxes to each other is `links:` in `agentbox.yaml`. Each entry names an env var and another
+repo (by folder name, or by id such as `api-admin-1a2b3c` when two clones share a name); the box gets
+the address of the **same-named box** in that repo:
 
-- **Browser → API.** When a name is used in more than one repo, each box's URL is qualified:
-  `http://nvo-9743.<repo-id>.localhost:7777` (`<repo-id>` is the box's folder name, e.g. `api-admin-1a2b3c`).
-  Every box knows its own name as `AGENTBOX_NAME`, and `dev` runs through a shell, so the frontend can point
-  at the backend box of the same name without any code change:
+```yaml
+# web-panel/agentbox.yaml
+dev: npm start -- --port "$APP_PORT"
+ports: [APP_PORT]
+links:
+  REACT_APP_API_URL: api-admin        # http://nvo-9743.api-admin-1a2b3c.localhost:7777/
+  UNIFIED_ADDR: api-unified:addr      # 127.0.0.1:20007
+  UNIFIED_PORT: api-unified:port      # 20007
+```
 
-  ```yaml
-  dev: REACT_APP_API_URL="http://$AGENTBOX_NAME.api-admin-1a2b3c.localhost:7777" npm start -- --port "$APP_PORT"
-  ```
+- **`url`** (the default) is the proxy URL, for the browser: Chrome, Firefox and Edge resolve `*.localhost`, and
+  each box gets its own origin, so sessions do not bleed between boxes. It is known before the other box
+  exists, so the order of creation does not matter.
+- **`addr` / `port`** are the other box's own port, for server-to-server calls (Go, Node and curl do not
+  resolve `*.localhost` on macOS). They resolve when the other box exists: links are filled in when a box
+  is created and refreshed every time its dev server starts, in the env file (managed keys only; your own
+  lines stay) and in the process env.
 
-- **Server → server.** The system resolver (and so Go, Node and curl) does not resolve `*.localhost` on macOS:
-  call the other box's port directly (`agentbox --repo ~/code/api-admin ls --json` shows it) or add
-  `127.0.0.1 nvo-9743.api-admin-1a2b3c.localhost` to `/etc/hosts` and use the proxy URL.
+The linked repo must be one agentbox knows (run any agentbox command in it once). Links show up in the
+box's **Managed env** on the dashboard.
 
 - **Shared backends.** If the frontends are what the agents change, leave the backends on a shared dev
   environment and create boxes only in the frontend repos.

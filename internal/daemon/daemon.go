@@ -250,8 +250,10 @@ func Run(ctx context.Context, p Paths) error {
 	defer store.Close()
 
 	bus := events.NewBus()
+	apiPort := 0 // set once the HTTP listener is bound; `url` links point there
 	m := box.NewManager(box.Deps{Store: store, BoxesDir: boxes, LogsDir: p.Logs,
-		PortLo: settings.PortRange[0], PortHi: settings.PortRange[1], Bus: bus})
+		PortLo: settings.PortRange[0], PortHi: settings.PortRange[1], Bus: bus,
+		APIPort: func() int { return apiPort }})
 	if err := m.Recover(); err != nil {
 		return err
 	}
@@ -268,6 +270,9 @@ func Run(ctx context.Context, p Paths) error {
 	// URLs and login links need the port that was actually chosen.
 	apiAddr := ""
 	tl, err := net.Listen("tcp", settings.APIAddr)
+	if err == nil {
+		apiPort = tl.Addr().(*net.TCPAddr).Port
+	}
 	if err != nil {
 		slog.Warn("HTTP API disabled", "addr", settings.APIAddr, "err", err)
 		_ = os.Remove(p.APIAddr)

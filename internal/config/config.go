@@ -28,6 +28,37 @@ type Config struct {
 	Env     Env      `yaml:"env"`
 	Compose *Compose `yaml:"compose"`
 	Copy    []string `yaml:"copy"`
+	// Links hands a box the address of the same-named box in another repo:
+	// env var name → "<repo>[:url|port|addr]" (see ParseLink).
+	Links map[string]string `yaml:"links"`
+}
+
+// Link is one `links:` entry. Repo names another repo agentbox knows, by its
+// folder name or its id; Kind selects what the env var receives: "url" (the
+// proxy URL, http://<box>.<repo-id>.localhost:<port>/, stable even before the
+// other box exists), "port" (the other box's proxy port) or "addr"
+// (127.0.0.1:<port>, for server-to-server calls).
+type Link struct {
+	Repo string
+	Kind string
+}
+
+// ParseLink reads "<repo>", "<repo>:url", "<repo>:port" or "<repo>:addr".
+func ParseLink(spec string) (Link, error) {
+	repo, kind, found := strings.Cut(spec, ":")
+	if !found {
+		kind = "url"
+	}
+	repo, kind = strings.TrimSpace(repo), strings.TrimSpace(kind)
+	if repo == "" {
+		return Link{}, fmt.Errorf("links: %q: the repo name is empty", spec)
+	}
+	switch kind {
+	case "url", "port", "addr":
+	default:
+		return Link{}, fmt.Errorf("links: %q: must end in :url, :port or :addr (got %q)", spec, kind)
+	}
+	return Link{Repo: repo, Kind: kind}, nil
 }
 
 type DB struct {
@@ -78,7 +109,7 @@ var serviceName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
 var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 var knownKeys = map[string][]string{
-	"":        {"version", "setup", "dev", "ports", "proxy", "db", "env", "compose", "copy"},
+	"":        {"version", "setup", "dev", "ports", "proxy", "db", "env", "compose", "copy", "links"},
 	"db":      {"driver", "url_env", "source"},
 	"env":     {"template", "file", "set"},
 	"compose": {"file", "services", "wait"},
@@ -230,6 +261,20 @@ func (c *Config) validate() error {
 	for i, p := range c.Copy {
 		if err := localPath(fmt.Sprintf("copy[%d]", i), p); err != nil {
 			return err
+		}
+	}
+	for k, spec := range c.Links {
+		if !envName.MatchString(k) {
+			return fmt.Errorf("%s: links: %q is not a valid env var name", FileName, k)
+		}
+		if seen[k] || (c.DB != nil && c.DB.URLEnv == k) {
+			return fmt.Errorf("%s: links: %q is already a port or the db url env", FileName, k)
+		}
+		if _, ok := c.Env.Set[k]; ok {
+			return fmt.Errorf("%s: links: %q is also in env.set", FileName, k)
+		}
+		if _, err := ParseLink(spec); err != nil {
+			return fmt.Errorf("%s: %w", FileName, err)
 		}
 	}
 	return nil

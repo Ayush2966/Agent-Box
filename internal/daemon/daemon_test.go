@@ -354,3 +354,59 @@ func TestLoadSettingsRejectsNonLoopbackAPIAddr(t *testing.T) {
 		}
 	}
 }
+
+// A `url` link points at the port the daemon actually bound (api_addr may say :0).
+func TestRunResolvesURLLinksToTheBoundAPIPort(t *testing.T) {
+	p := daemon.PathsFor(tempHome(t))
+	os.WriteFile(p.Config, []byte("api_addr: 127.0.0.1:0\n"), 0o600)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errc := make(chan error, 1)
+	go func() { errc <- daemon.Run(ctx, p) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for !daemon.Ping(p.Sock) {
+		if time.Now().After(deadline) {
+			t.Fatal("daemon never came up")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	c := client.New(p.Sock)
+	h, err := c.HealthInfo(ctx)
+	if err != nil || h.APIAddr == "" {
+		t.Fatalf("health: %+v %v", h, err)
+	}
+	backend := testutil.NewRepo(t, map[string]string{"agentbox.yaml": "version: 1\n"})
+	br, err := c.ResolveRepo(ctx, backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	frontend := testutil.NewRepo(t, map[string]string{"agentbox.yaml": "version: 1\nlinks:\n  API_URL: " + filepath.Base(backend) + "\n"})
+	fr, err := c.ResolveRepo(ctx, frontend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evs, err := c.Events(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.CreateBox(ctx, box.NewOptions{RepoPath: frontend, Name: "a", NoDev: true}); err != nil {
+		t.Fatal(err)
+	}
+	for ev := range evs {
+		if ev.Type == "box.state" && ev.Data["state"] == "ready" {
+			break
+		}
+	}
+	bv, err := c.GetBox(ctx, fr.ID, "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, port, _ := strings.Cut(h.APIAddr, ":")
+	if want := "http://a." + br.ID + ".localhost:" + port + "/"; bv.Env["API_URL"] != want {
+		t.Fatalf("API_URL = %q, want %q", bv.Env["API_URL"], want)
+	}
+	cancel()
+	if err := <-errc; err != nil {
+		t.Fatal(err)
+	}
+}
