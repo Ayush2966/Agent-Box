@@ -208,6 +208,10 @@ func (m Model) updateBoxes(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if ok {
 			return m, m.shell(b)
 		}
+	case key.Matches(k, keys.Editor):
+		if ok {
+			return m, m.openEditor(b)
+		}
 	case key.Matches(k, keys.Filter):
 		m.querying, m.query = true, ""
 		m.refreshTable()

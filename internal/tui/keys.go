@@ -4,7 +4,7 @@ import "github.com/charmbracelet/bubbles/key"
 
 type keyMap struct {
 	Up, Down, Open, Back, New, StartStop, Remove, Merge, Doctor, RefreshDB, Repo, OpenURL, Shell,
-	Filter, Reload, Help, Quit, Tab, Tab1, Tab2, Tab3, Follow, Clear, Against, Fix, Recheck key.Binding
+	Filter, Reload, Help, Quit, Tab, Tab1, Tab2, Tab3, Follow, Clear, Against, Fix, Recheck, Editor key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -25,6 +25,7 @@ func newKeyMap() keyMap {
 		Repo:      b("r", "repo filter", "r"),
 		OpenURL:   b("o", "open url", "o"),
 		Shell:     b("e", "shell", "e"),
+		Editor:    b("E", "editor", "E"),
 		Filter:    b("/", "filter", "/"),
 		Reload:    b("ctrl+r", "reload", "ctrl+r", "f5"),
 		Help:      b("?", "help", "?"),
@@ -51,7 +52,7 @@ func (m Model) shortHelp() []key.Binding {
 	k := m.keys
 	switch m.mode {
 	case modeBox:
-		return []key.Binding{k.Back, k.Tab, k.StartStop, k.Remove, k.Merge, k.Shell, k.Help}
+		return []key.Binding{k.Back, k.Tab, k.StartStop, k.Remove, k.Merge, k.Shell, k.Editor, k.Help}
 	case modeNew:
 		return []key.Binding{hb("enter", "create"), hb("tab", "next field"), hb("esc", "cancel")}
 	case modeDoctor:
@@ -65,7 +66,7 @@ func (m Model) fullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Open, k.Back, k.Tab, k.Filter, k.Repo},
 		{k.New, k.StartStop, k.Remove, k.Merge, k.Doctor, k.RefreshDB},
-		{k.OpenURL, k.Shell, k.Follow, k.Clear, k.Against, k.Reload, k.Quit},
+		{k.OpenURL, k.Shell, k.Editor, k.Follow, k.Clear, k.Against, k.Reload, k.Quit},
 		{k.Tab1, k.Tab2, k.Tab3, k.Fix, k.Recheck, k.Help, key.NewBinding(key.WithKeys("g", "G"), key.WithHelp("g/G", "top/bottom"))},
 	}
 }

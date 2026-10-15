@@ -156,7 +156,8 @@ The Logs tab streams live and has a filter box and an "errors only" toggle.
 
 `agentbox tui` is the terminal version: a live table of every box (`r` cycles repos, `/` filters),
 `enter` for a box's overview, logs and diff, `s`/`x`/`m` to start-stop, remove and merge, `e` to open
-a shell inside the box with its env, `o` to open its URL, `d` for doctor, `?` for every key.
+a shell inside the box with its env, `E` to open it in your editor, `o` to open its URL, `d` for doctor,
+`?` for every key.
 
 Every box with ports is also served at **`http://<box>.localhost:7777/`** (or
 `http://<box>.<repo-slug>.localhost:7777/` when two repos share a box name). The daemon forwards to the

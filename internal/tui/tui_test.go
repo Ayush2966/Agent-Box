@@ -113,6 +113,11 @@ func (f *fake) RemoveBox(_ context.Context, repo, name string, force, keep bool)
 	return nil
 }
 
+func (f *fake) OpenBox(_ context.Context, _, name, app string) (string, error) {
+	f.rec(fmt.Sprintf("open %s app=%s", name, app))
+	return "editor", f.fail["open"]
+}
+
 func (f *fake) Merge(_ context.Context, _, name string, opts box.MergeOptions) (api.MergeResult, error) {
 	f.rec(fmt.Sprintf("merge %s into=%q squash=%v", name, opts.Into, opts.Squash))
 	return api.MergeResult{Into: "main"}, f.fail["merge"]
@@ -829,4 +834,14 @@ func TestReloadPrunesStaleSteps(t *testing.T) {
 		t.Fatalf("stale steps survived the reload: %v", m.steps)
 	}
 	mustNotContain(t, m.View(), "dev…")
+}
+
+func TestEditorKeyOpensTheBox(t *testing.T) {
+	f := newFake()
+	m := newModel(t, f)
+	m = press(t, m, "E")
+	if !f.called("open a app=editor") {
+		t.Fatalf("calls %v", f.calls)
+	}
+	mustContain(t, m.View(), "opened a in editor")
 }

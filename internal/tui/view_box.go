@@ -119,6 +119,8 @@ func (m Model) updateBox(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.openURL(b)
 	case key.Matches(k, keys.Shell):
 		return m, m.shell(b)
+	case key.Matches(k, keys.Editor):
+		return m, m.openEditor(b)
 	}
 	switch m.tab {
 	case tabLogs:
