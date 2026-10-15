@@ -37,6 +37,7 @@ macOS and Linux. Needs git ≥ 2.38, plus pg_dump/pg_restore for Postgres, mysql
     agentbox logs feature-x -f
     agentbox merge feature-x
     agentbox rm feature-x
+    agentbox pr 123            # review a pull request: box pr-123 from its head, at http://pr-123.localhost:7777/
 
 ## Step by step
 
@@ -119,6 +120,7 @@ Your app must read its ports from these env vars. Boxes can't share a hard-coded
 |---|---|
 | `init` | draft `agentbox.yaml` from the repo |
 | `new <name> [--from REF] [--no-dev]` | create a box |
+| `pr <number> [--name N] [--no-dev]` | create a box from a pull request on origin (`pr-<number>`; GitHub, GitLab, Gitea) |
 | `ls [--all] [--json]` | list boxes |
 | `logs <name> [-f]` | setup + dev-server output |
 | `start` / `stop <name>` | control the dev server |

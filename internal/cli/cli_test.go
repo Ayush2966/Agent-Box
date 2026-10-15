@@ -3,8 +3,10 @@ package cli
 import (
 	"bytes"
 	"context"
+	"github.com/Ayush2966/Agent-Box/internal/testutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -181,5 +183,75 @@ func TestTUIRefusesWithoutATerminal(t *testing.T) {
 	code, out, _ := run("tui", "--help")
 	if code != 0 || !strings.Contains(out, "--all") {
 		t.Fatalf("help: exit %d\n%s", code, out)
+	}
+}
+
+// `agentbox pr 7` fetches refs/pull/7/head from origin and boxes that commit.
+func TestPRCreatesABoxFromThePullRequestHead(t *testing.T) {
+	home := shortTempHome(t)
+	t.Setenv("AGENTBOX_HOME", home)
+	os.WriteFile(filepath.Join(home, "config.yaml"), []byte("api_addr: 127.0.0.1:0\n"), 0o600)
+	p := daemon.PathsFor(home)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go daemon.Run(ctx, p)
+	deadline := time.Now().Add(5 * time.Second)
+	for !daemon.Ping(p.Sock) {
+		if time.Now().After(deadline) {
+			t.Fatal("daemon never came up")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	repo := testutil.NewRepo(t, map[string]string{"agentbox.yaml": "version: 1\n", "README.md": "hi\n"})
+	origin := filepath.Join(t.TempDir(), "origin.git")
+	git := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	git("", "init", "--bare", "-q", origin)
+	git(repo, "remote", "add", "origin", origin)
+	git(repo, "checkout", "-q", "-b", "feature")
+	testutil.WriteFiles(t, repo, map[string]string{"new.txt": "pr\n"})
+	git(repo, "add", "new.txt")
+	git(repo, "commit", "-q", "-m", "pr commit")
+	want := git(repo, "rev-parse", "HEAD")
+	git(repo, "push", "-q", "origin", "HEAD:refs/pull/7/head")
+	git(repo, "checkout", "-q", "-")
+	git(repo, "branch", "-q", "-D", "feature")
+
+	code, out, stderr := run("--repo", repo, "pr", "7", "--no-dev")
+	if code != 0 || !strings.Contains(out, "box pr-7 is ready") {
+		t.Fatalf("exit %d\nstdout: %s\nstderr: %s", code, out, stderr)
+	}
+	var dir string
+	for _, l := range strings.Split(out, "\n") {
+		if f := strings.Fields(l); len(f) == 2 && f[0] == "dir" {
+			dir = f[1]
+		}
+	}
+	if dir == "" {
+		t.Fatalf("no dir in output:\n%s", out)
+	}
+	if got := git(dir, "rev-parse", "HEAD"); got != want {
+		t.Fatalf("box HEAD %s, want the pull request head %s", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "new.txt")); err != nil {
+		t.Fatalf("the pull request's file is missing from the box: %v", err)
+	}
+
+	code, _, stderr = run("--repo", repo, "pr", "8", "--no-dev")
+	if code == 0 || !strings.Contains(stderr, "pull request 8 not found") {
+		t.Fatalf("missing request: exit %d, stderr %q", code, stderr)
+	}
+	code, _, stderr = run("--repo", repo, "pr", "x")
+	if code != 2 {
+		t.Fatalf("non-number: exit %d, stderr %q", code, stderr)
 	}
 }

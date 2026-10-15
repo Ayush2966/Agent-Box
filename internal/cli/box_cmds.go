@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/Ayush2966/Agent-Box/internal/worktree"
 	"io"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -56,6 +58,68 @@ func (a *app) newCmd() *cobra.Command {
 	}
 	f := cmd.Flags()
 	f.StringVar(&opts.From, "from", "", "branch or commit to start from (default: current HEAD)")
+	f.BoolVar(&opts.NoDev, "no-dev", false, "don't start the dev server")
+	f.BoolVar(&opts.KeepFailed, "keep-failed", false, "keep a box that failed to create, for debugging")
+	f.BoolVar(&opts.Terminate, "terminate", false, "terminate stray connections to the Postgres template")
+	return cmd
+}
+
+// prCmd creates a box from a pull request: `agentbox pr 123` fetches the
+// request's head from origin and starts a box named pr-123 on it.
+func (a *app) prCmd() *cobra.Command {
+	var opts box.NewOptions
+	var name string
+	cmd := &cobra.Command{
+		Use:   "pr <number>",
+		Short: "Create a box from a pull request on origin (GitHub, GitLab, Gitea)",
+		Args:  exactArgs(1, "a pull request number"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			n, err := strconv.Atoi(args[0])
+			if err != nil || n <= 0 {
+				return usage(fmt.Errorf("%q is not a pull request number", args[0]))
+			}
+			ctx, cancel := context.WithCancel(cmd.Context())
+			defer cancel()
+			repo, err := a.setup(ctx)
+			if err != nil {
+				return err
+			}
+			sha, webURL, err := worktree.FetchPullRequest(repo.Path, n)
+			if err != nil {
+				return errs.New(errs.NotFound, "%v", err).
+					WithHint("the number is the one in the pull request's URL; the repo's origin must be where the request was opened")
+			}
+			opts.RepoPath, opts.From = repo.Path, sha
+			opts.Name = name
+			if opts.Name == "" {
+				opts.Name = fmt.Sprintf("pr-%d", n)
+			}
+			evs, err := a.c.Events(ctx)
+			if err != nil {
+				return err
+			}
+			created, err := a.c.CreateBox(ctx, opts)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "creating box %s from pull request %d (%s)\n", opts.Name, n, sha[:12])
+			if err := waitCreated(evs, created.ID, out); err != nil {
+				return err
+			}
+			b, err := a.c.GetBox(ctx, repo.ID, opts.Name)
+			if err != nil {
+				return err
+			}
+			printBox(out, b)
+			if webURL != "" {
+				fmt.Fprintf(out, "\npull request:\n  %s\n", webURL)
+			}
+			return nil
+		},
+	}
+	f := cmd.Flags()
+	f.StringVar(&name, "name", "", "box name (default: pr-<number>)")
 	f.BoolVar(&opts.NoDev, "no-dev", false, "don't start the dev server")
 	f.BoolVar(&opts.KeepFailed, "keep-failed", false, "keep a box that failed to create, for debugging")
 	f.BoolVar(&opts.Terminate, "terminate", false, "terminate stray connections to the Postgres template")
