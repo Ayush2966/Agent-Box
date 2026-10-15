@@ -14,6 +14,32 @@ b     running  APP_PORT=20001  myapp_agentbox_b  2      1
 c     running  APP_PORT=20002  myapp_agentbox_c  0      3
 ```
 
+## Why
+
+Every developer now works on several things at once: tickets, PR reviews, and AI coding agents that
+run for an hour unattended. On one checkout they collide: branches, `node_modules`, ports, the dev
+database. The usual answers are stash-and-switch, hand-made worktrees and ports picked by hand, and
+each switch costs minutes and context. An agent working on the main checkout is also a risk: it can
+leave half-done changes in the tree you are about to commit from.
+
+agentbox gives each task its own box: a git worktree, free ports, a copy of the database, its own
+env file and a running dev server, in under a minute, with a dashboard, a terminal UI and a desktop
+app to watch them all. The main checkout is never touched. Finishing is `merge`; throwing a box away
+is `rm`.
+
+What a team gets out of it:
+
+- **Throughput.** Several tickets, or several agents, in parallel per developer. No stash dance.
+- **Safer agents.** They work in a disposable worktree on their own branch, never on your checkout.
+- **Faster reviews.** Any branch is running at its own URL a minute after `agentbox new x --from origin/pr-branch`,
+  with no local setup and nothing to tear down.
+- **Onboarding.** A repo's setup lives in one `agentbox.yaml`, so a new developer gets a running app
+  with one command.
+
+What it is not: it runs on your machine only (no remote or shared environments, by design), on macOS
+and Linux; services that fetch their configuration from a cluster still need that configuration
+locally; and the macOS app is not notarized yet.
+
 ## Install
 
     brew tap Ayush2966/tap
