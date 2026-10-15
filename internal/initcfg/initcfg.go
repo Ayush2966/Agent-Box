@@ -159,17 +159,33 @@ func listenWarnings(root string, files ...string) []string {
 func detectGo(root string) stack {
 	st := stack{setup: "go mod download", dev: "go run .", portVar: "PORT",
 		devNote: "the server must read its port from the env (os.Getenv(\"PORT\"))"}
+	if exists(root, "main.go") {
+		return st
+	}
+	if exists(root, filepath.Join("cmd", "main.go")) {
+		st.dev = "go run ./cmd"
+		return st
+	}
 	cmds, _ := filepath.Glob(filepath.Join(root, "cmd", "*", "main.go"))
+	var names []string
+	for _, c := range cmds {
+		names = append(names, filepath.Base(filepath.Dir(c)))
+	}
 	switch {
-	case len(cmds) == 1:
-		st.dev = "go run ./cmd/" + filepath.Base(filepath.Dir(cmds[0]))
-	case len(cmds) > 1 && !exists(root, "main.go"):
-		var names []string
-		for _, c := range cmds {
-			names = append(names, filepath.Base(filepath.Dir(c)))
-		}
+	case len(names) == 1:
 		st.dev = "go run ./cmd/" + names[0]
-		st.warnings = append(st.warnings, fmt.Sprintf("several commands under cmd/ (%s); dev runs the first, change it if that is not the server", strings.Join(names, ", ")))
+	case len(names) > 1:
+		pick := names[0]
+		for _, n := range names { // the server-looking one wins
+			if slices.Contains([]string{"server", "serve", "api", "daemon", "app", "web", "main"}, n) {
+				pick = n
+				break
+			}
+		}
+		st.dev = "go run ./cmd/" + pick
+		if !slices.Contains([]string{"server", "serve", "api", "daemon", "app", "web", "main"}, pick) {
+			st.warnings = append(st.warnings, fmt.Sprintf("several commands under cmd/ (%s); dev runs %s, change it if that is not the server", strings.Join(names, ", "), pick))
+		}
 	}
 	return st
 }
