@@ -158,6 +158,11 @@ func (m *Manager) Validate(opts NewOptions) (state.Repo, *config.Config, error) 
 			return repo, nil, errs.New(errs.Invalid, "env.template %s not found in %s", t, repo.Path)
 		}
 	}
+	for _, f := range cfg.Env.Files {
+		if _, err := os.Stat(filepath.Join(repo.Path, f)); err != nil {
+			return repo, nil, errs.New(errs.Invalid, "env.files: %s not found in %s", f, repo.Path)
+		}
+	}
 	for _, c := range cfg.Copy {
 		if _, err := os.Stat(filepath.Join(repo.Path, c)); err != nil {
 			return repo, nil, errs.New(errs.Invalid, "copy: %s not found in %s", c, repo.Path)
@@ -694,7 +699,34 @@ func (u undoStack) run() {
 // resolve now, so a `port`/`addr` link to a box that does not exist yet is
 // empty until the next start (Start refreshes the env file).
 func (m *Manager) envVars(cfg *config.Config, b state.Box) []envfile.KV {
-	return append(baseEnvVars(cfg, b), m.linkVars(cfg, b)...)
+	var kv []envfile.KV
+	kv = append(kv, m.fileVars(cfg, b)...) // lowest precedence
+	kv = append(kv, baseEnvVars(cfg, b)...)
+	kv = append(kv, m.linkVars(cfg, b)...)
+	return kv
+}
+
+// fileVars reads env.files in order (later wins), overridden in turn by
+// env.set and the managed vars. A file that cannot be read is skipped with a
+// warning (New's preflight already checked they exist).
+func (m *Manager) fileVars(cfg *config.Config, b state.Box) []envfile.KV {
+	if len(cfg.Env.Files) == 0 {
+		return nil
+	}
+	repo, err := m.d.Store.RepoByID(b.RepoID)
+	if err != nil {
+		return nil
+	}
+	var kv []envfile.KV
+	for _, f := range cfg.Env.Files {
+		data, err := os.ReadFile(filepath.Join(repo.Path, f))
+		if err != nil {
+			slog.Warn("env.files unreadable", "file", f, "err", err)
+			continue
+		}
+		kv = append(kv, envfile.Parse(data)...)
+	}
+	return kv
 }
 
 func baseEnvVars(cfg *config.Config, b state.Box) []envfile.KV {

@@ -538,3 +538,42 @@ func TestLinksRefuseRepoAgentboxDoesNotKnow(t *testing.T) {
 	}
 	assertGone(t, m, repo, "x")
 }
+
+func TestEnvFilesLayerUnderSetAndManaged(t *testing.T) {
+	m := newTestManager(t)
+	repo := testutil.NewRepo(t, map[string]string{
+		".gitignore":   ".env\n",
+		"base.env":     "SHARED=base\nDB_HOST=localhost\nONLY_BASE=1\n",
+		"local.env":    "SHARED=local\nAPI_KEY=secret\n",
+		".env.example": "FROM_TEMPLATE=1\nSHARED=template\n",
+	})
+	testutil.WriteFiles(t, repo, map[string]string{"agentbox.yaml": "version: 1\ndev: sleep 30\nports: [APP_PORT]\n" +
+		"env:\n  template: .env.example\n  files: [base.env, local.env]\n  set: {APP_PORT_NOTE: n, SHARED: wins}\n"})
+	b, err := m.New(ctx, NewOptions{RepoPath: repo, Name: "a", NoDev: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := readEnvFile(t, filepath.Join(b.Dir, ".env"))
+	// later file wins over earlier; env.set wins over files; template keys kept
+	checks := map[string]string{"ONLY_BASE": "1", "API_KEY": "secret", "DB_HOST": "localhost", "SHARED": "wins", "FROM_TEMPLATE": "1"}
+	for k, want := range checks {
+		if env[k] != want {
+			t.Errorf("%s = %q, want %q (full: %+v)", k, env[k], want, env)
+		}
+	}
+	// the managed port is present and numeric
+	if env["APP_PORT"] == "" || env["APP_PORT"] == "0" {
+		t.Errorf("APP_PORT = %q", env["APP_PORT"])
+	}
+}
+
+func TestEnvFilesMustExist(t *testing.T) {
+	m := newTestManager(t)
+	repo := testutil.NewRepo(t, map[string]string{".gitignore": ".env\n"})
+	testutil.WriteFiles(t, repo, map[string]string{"agentbox.yaml": "version: 1\ndev: sleep 30\nenv:\n  files: [missing.env]\n"})
+	_, err := m.New(ctx, NewOptions{RepoPath: repo, Name: "a", NoDev: true})
+	if e := errs.From(err); e == nil || e.Code != errs.Invalid || !strings.Contains(e.Error(), "env.files: missing.env not found") {
+		t.Fatalf("err = %v", err)
+	}
+	assertGone(t, m, repo, "a")
+}

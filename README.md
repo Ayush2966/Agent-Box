@@ -112,6 +112,7 @@ compose:                      # optional: a Docker Compose project per box
   services: [redis]           # default: all services
 env:
   template: .env.example      # copied and rewritten into the box's .env
+  files: [config/local.env]   # extra env files layered in (later wins; set and ports win over them)
   set: { NODE_ENV: development }
 copy: [.env.local]            # untracked files to copy from your main checkout
 links:                        # optional: the same-named box in another repo (see below)

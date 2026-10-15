@@ -47,6 +47,7 @@ func TestParseErrors(t *testing.T) {
 		{"missing source", "version: 1\ndb: {driver: sqlite, url_env: X}", "db.source is required"},
 		{"escaping copy path", "version: 1\ncopy: [../secret]", "must be a relative path inside the repo"},
 		{"absolute template", "version: 1\nenv: {template: /etc/passwd}", "must be a relative path inside the repo"},
+		{"escaping env file", "version: 1\nenv: {files: [../secret.env]}", "must be a relative path inside the repo"},
 		{"escaping sqlite source", "version: 1\ndb: {driver: sqlite, url_env: X, source: 'file:../x.db'}", "must be a relative path inside the repo"},
 		{"bad set key", "version: 1\nenv: {set: {'A-B': x}}", `env.set: "A-B" is not a valid env var name`},
 		{"empty file", "", "is empty"},

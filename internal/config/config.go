@@ -86,6 +86,10 @@ type Env struct {
 	Template string            `yaml:"template"`
 	File     string            `yaml:"file"`
 	Set      map[string]string `yaml:"set"`
+	// Files are extra env files layered under env.set and the managed vars:
+	// read in order (later wins), then the box's ports/db/links win over all.
+	// Use them to inject a local config a service needs to boot.
+	Files []string `yaml:"files"`
 }
 
 // Compose describes the per-box Docker Compose stack.
@@ -111,7 +115,7 @@ var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 var knownKeys = map[string][]string{
 	"":        {"version", "setup", "dev", "ports", "proxy", "db", "env", "compose", "copy", "links"},
 	"db":      {"driver", "url_env", "source"},
-	"env":     {"template", "file", "set"},
+	"env":     {"template", "file", "set", "files"},
 	"compose": {"file", "services", "wait"},
 }
 
@@ -240,6 +244,11 @@ func (c *Config) validate() error {
 	}
 	if c.Env.Template != "" {
 		if err := localPath("env.template", c.Env.Template); err != nil {
+			return err
+		}
+	}
+	for i, f := range c.Env.Files {
+		if err := localPath(fmt.Sprintf("env.files[%d]", i), f); err != nil {
 			return err
 		}
 	}
