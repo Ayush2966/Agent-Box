@@ -55,8 +55,8 @@ macOS and Linux. Needs git ≥ 2.38, plus pg_dump/pg_restore for Postgres, mysql
    second box fails. Both `setup` and `dev` run through `sh -c` with the box's env, so the command line can
    pass it on without touching the code:
    - webpack: `dev: npm start -- --port "$APP_PORT"` (the flag overrides `devServer.port`)
-   - Vite: `dev: npm run dev -- --host 127.0.0.1 --port "$APP_PORT" --strictPort` (without `--host`, Vite on
-     recent Node binds only `[::1]`, and the proxy dials `127.0.0.1`)
+   - Vite: `dev: npm run dev -- --port "$APP_PORT" --strictPort` (Vite on recent Node binds only `[::1]` for
+     "localhost"; the proxy tries `127.0.0.1` and then `[::1]`, so no `--host` is needed)
    - Express/Node: `app.listen(process.env.APP_PORT || 3000)`
    - Go: `flag` or `os.Getenv("APP_PORT")`
    - Docker Compose: `"${REDIS_PORT}:6379"` in the compose file and `REDIS_PORT` under `ports:`
