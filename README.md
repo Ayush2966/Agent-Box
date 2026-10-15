@@ -44,8 +44,10 @@ macOS and Linux. Needs git ≥ 2.38, plus pg_dump/pg_restore for Postgres, mysql
 1. **Install** the CLI (above) and, on macOS, optionally the app: `brew install --cask Ayush2966/tap/agentbox-desktop`.
    The daemon starts itself on the first command; nothing to run by hand.
 
-2. **Describe the repo once.** In the repo root, `agentbox init` drafts `agentbox.yaml` from `package.json` and
-   friends. Fix three things before the first box:
+2. **Describe the repo once.** In the repo root, `agentbox init` drafts `agentbox.yaml`. It recognises Vite,
+   Next.js, webpack, Create React App, Angular, Nuxt, NestJS, plain Node, Go (`cmd/<name>`), Rails and Django,
+   and writes a `dev` command that already passes the box's port (`--port "$APP_PORT"`, `-p`, or `PORT` in the
+   env) plus a reproducible `setup` (`npm ci` when there is a lockfile). Check three things before the first box:
    - `setup`: the command that makes a fresh checkout runnable. Use what works in *this* repo: `npm ci`,
      `npm ci --legacy-peer-deps` when `npm install` fails on peer ranges, `go mod download`, `pip install -e .`.
    - `dev`: the command that starts the dev server **on the port agentbox hands out** (next point).

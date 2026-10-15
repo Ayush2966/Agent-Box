@@ -30,7 +30,8 @@ func TestDetectNodePostgres(t *testing.T) {
 		"pnpm-lock.yaml": "",
 		".env.example":   "PORT=3000\nAPI_PORT=4000\nDATABASE_URL=postgres://u:p@localhost:5432/app\n",
 	})
-	if cfg.Setup != "pnpm install" || cfg.Dev != "pnpm run dev" {
+	// Vite preset, with the template's own port name and pnpm's frozen install.
+	if cfg.Setup != "pnpm install --frozen-lockfile" || cfg.Dev != `pnpm run dev -- --port "$PORT" --strictPort` {
 		t.Errorf("setup/dev = %q / %q", cfg.Setup, cfg.Dev)
 	}
 	if !slices.Equal(cfg.Ports, []string{"PORT", "API_PORT"}) {
@@ -69,7 +70,7 @@ func TestDetectSQLite(t *testing.T) {
 
 func TestDetectGoAndEmpty(t *testing.T) {
 	_, cfg := detect(t, map[string]string{"go.mod": "module x\n"})
-	if cfg.Setup != "go mod download" || cfg.Dev != "go run ." || len(cfg.Ports) != 0 {
+	if cfg.Setup != "go mod download" || cfg.Dev != "go run ." || !slices.Equal(cfg.Ports, []string{"PORT"}) {
 		t.Errorf("go: %+v", cfg)
 	}
 	_, cfg = detect(t, nil)
@@ -188,6 +189,65 @@ func TestDetectComposeFile(t *testing.T) {
 	for _, w := range res.Warnings {
 		if strings.Contains(w, "host port") {
 			t.Fatalf("no warning expected for an interpolated port: %v", res.Warnings)
+		}
+	}
+}
+
+// Each framework gets the flag or env var that makes its dev server take the
+// port agentbox allocates, and a lockfile makes setup reproducible.
+func TestDetectStackPresets(t *testing.T) {
+	cases := []struct {
+		name  string
+		files map[string]string
+		setup string
+		dev   string
+		ports []string
+		warn  string
+	}{
+		{"vite", map[string]string{"package.json": `{"scripts":{"dev":"vite"},"devDependencies":{"vite":"^6"}}`, "package-lock.json": "{}"},
+			"npm ci", `npm run dev -- --port "$APP_PORT" --strictPort`, []string{"APP_PORT"}, ""},
+		{"next", map[string]string{"package.json": `{"scripts":{"dev":"next dev --turbopack"},"dependencies":{"next":"15"}}`},
+			"npm install", `npm run dev -- -p "$APP_PORT"`, []string{"APP_PORT"}, ""},
+		{"webpack", map[string]string{"package.json": `{"scripts":{"start":"webpack serve --config scripts/webpack.dev.js"}}`, "yarn.lock": ""},
+			"yarn install --frozen-lockfile", `yarn run start -- --port "$APP_PORT"`, []string{"APP_PORT"}, ""},
+		{"cra", map[string]string{"package.json": `{"scripts":{"start":"react-scripts start"},"dependencies":{"react-scripts":"5"}}`},
+			"npm install", "npm run start", []string{"PORT"}, ""},
+		{"nest start:dev", map[string]string{"package.json": `{"scripts":{"start":"nest start","start:dev":"nest start --watch"},"dependencies":{"@nestjs/core":"10"}}`,
+			"src/main.ts": "await app.listen(process.env.PORT);\n"},
+			"npm install", "npm run start:dev", []string{"PORT"}, ""},
+		{"nest fixed port", map[string]string{"package.json": `{"scripts":{"start":"nest start"},"dependencies":{"@nestjs/core":"10"}}`,
+			"src/main.ts": "await app.listen(3000);\n"},
+			"npm install", "npm run start", []string{"PORT"}, "src/main.ts listens on a fixed port"},
+		{"express", map[string]string{"package.json": `{"scripts":{"dev":"nodemon server.js"}}`, "server.js": "app.listen(3000)\n"},
+			"npm install", "npm run dev", []string{"PORT"}, "server.js listens on a fixed port"},
+		{"go cmd", map[string]string{"go.mod": "module x\n", "cmd/server/main.go": "package main\nfunc main(){}\n"},
+			"go mod download", "go run ./cmd/server", []string{"PORT"}, ""},
+		{"rails", map[string]string{"Gemfile": "", "bin/rails": "#!/usr/bin/env ruby\n"},
+			"bundle install", `bin/rails server -p "$APP_PORT"`, []string{"APP_PORT"}, ""},
+		{"django", map[string]string{"manage.py": "", "requirements.txt": "django\n"},
+			"pip install -r requirements.txt", `python manage.py runserver "$APP_PORT"`, []string{"APP_PORT"}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			res, cfg := detect(t, c.files)
+			if cfg.Setup != c.setup || cfg.Dev != c.dev || !slices.Equal(cfg.Ports, c.ports) {
+				t.Fatalf("setup=%q dev=%q ports=%v\n%s", cfg.Setup, cfg.Dev, cfg.Ports, res.YAML)
+			}
+			if c.warn != "" && !slices.ContainsFunc(res.Warnings, func(w string) bool { return strings.Contains(w, c.warn) }) {
+				t.Fatalf("warnings %v, want one containing %q", res.Warnings, c.warn)
+			}
+			if c.warn == "" && len(res.Warnings) != 0 {
+				t.Fatalf("unexpected warnings %v", res.Warnings)
+			}
+		})
+	}
+}
+
+func TestDetectHints(t *testing.T) {
+	res, _ := detect(t, map[string]string{"package.json": `{"scripts":{"dev":"vite"}}`, ".env.local": "VITE_API=x\n"})
+	for _, want := range []string{"# env: { template: .env.local, file: .env.local }", "# links:"} {
+		if !strings.Contains(res.YAML, want) {
+			t.Fatalf("missing hint %q:\n%s", want, res.YAML)
 		}
 	}
 }
