@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"github.com/Ayush2966/Agent-Box/internal/check"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -53,6 +54,44 @@ func (a *app) initCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+// checkCmd validates agentbox.yaml and can rehearse a box, without the daemon:
+// what to run in CI after editing the config.
+func (a *app) checkCmd() *cobra.Command {
+	var setup bool
+	var dev time.Duration
+	cmd := &cobra.Command{
+		Use:   "check",
+		Short: "Validate agentbox.yaml; with --setup/--dev, rehearse a box in a throwaway worktree",
+		Long: `Checks agentbox.yaml and the files it names, then (optionally) creates a
+temporary worktree of HEAD, gives it free ports like a box, runs setup and
+starts dev until the port answers. Needs no daemon and leaves nothing
+behind, so it runs in CI: agentbox check --setup --dev 60s`,
+		Args: exactArgs(0, "no arguments"),
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			p, err := a.repoPath()
+			if err != nil {
+				return err
+			}
+			root, err := worktree.MainWorktree(p)
+			if err != nil {
+				return err
+			}
+			out := cmd.OutOrStdout()
+			findings := check.Run(cmd.Context(), root, check.Options{Setup: setup, Dev: dev, Out: cmd.ErrOrStderr()})
+			for _, f := range findings {
+				fmt.Fprintf(out, "%s: %s\n", f.Level, f.Msg)
+			}
+			if check.Failed(findings) {
+				return errs.New(errs.Invalid, "%s has problems", config.FileName)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&setup, "setup", false, "run the setup command in a temporary worktree")
+	cmd.Flags().DurationVar(&dev, "dev", 0, "after setup, start the dev server and wait this long for its port (e.g. 60s)")
+	return cmd
 }
 
 func (a *app) dbCmd() *cobra.Command {

@@ -88,6 +88,11 @@ macOS and Linux. Needs git ≥ 2.38, plus pg_dump/pg_restore for Postgres, mysql
 If `agentbox new` fails in `setup`, the box is rolled back and the last lines of output are printed; fix the
 `setup` command and run `new` again (`--keep-failed` keeps the half-built box for a look).
 
+**Keeping the config honest.** `agentbox check` validates `agentbox.yaml` and the files it names and warns about
+the classic mistakes (a dev command that never gets the port, a tracked env file). `agentbox check --setup --dev 60s`
+goes further: a temporary worktree of HEAD gets free ports like a box, `setup` runs, `dev` starts and must answer
+on its port, then everything is removed. It needs no daemon, so commit `agentbox.yaml` and add that line to CI.
+
 ## Configuration
 
 `agentbox.yaml` at the repo root (read from your main checkout, so uncommitted edits apply):
@@ -121,6 +126,7 @@ Your app must read its ports from these env vars. Boxes can't share a hard-coded
 | Command | |
 |---|---|
 | `init` | draft `agentbox.yaml` from the repo |
+| `check [--setup] [--dev 60s]` | validate `agentbox.yaml`; with flags, rehearse setup and the dev server in a throwaway worktree (no daemon; for CI) |
 | `new <name> [--from REF] [--no-dev]` | create a box |
 | `pr <number> [--name N] [--no-dev]` | create a box from a pull request on origin (`pr-<number>`; GitHub, GitLab, Gitea). The request's code runs on your machine like any checkout; for an untrusted contributor use `--no-dev` and read the diff first |
 | `ls [--all] [--json]` | list boxes |

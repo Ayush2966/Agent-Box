@@ -17,6 +17,12 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
       - run: go test -tags e2e ./e2e/...
+      # The config check as a project would run it in CI: no daemon, a throwaway
+      # worktree. The example is copied out because it lives inside this repo.
+      - run: |
+          tmp=$(mktemp -d) && cp -R examples/sqlite/. "$tmp" && git -C "$tmp" init -q && git -C "$tmp" add -A
+          git -C "$tmp" -c user.name=ci -c user.email=ci@example.com commit -qm init
+          go run ./cmd/agentbox check --setup --dev 60s --repo "$tmp"
 
   # The Go side must build and pass without a dashboard build present.
   go-without-ui:
