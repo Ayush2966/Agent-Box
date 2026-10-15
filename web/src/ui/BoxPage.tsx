@@ -98,6 +98,7 @@ function Overview({ box }: { box: BoxView }) {
         <div className="row">
           <h3>Point your agent here</h3>
           <span className="spacer" />
+          <OpenButtons box={box} />
           <CopyButton text={cd} label="Copy cd command" />
           <CopyButton text={box.dir} label="Copy path" />
         </div>
@@ -143,6 +144,35 @@ function Overview({ box }: { box: BoxView }) {
         </section>
       )}
     </div>
+  )
+}
+
+/** Editor / terminal / file manager on the box's directory, via the daemon. */
+function OpenButtons({ box }: { box: BoxView }) {
+  const [busy, setBusy] = useState<string | null>(null)
+  const open = async (app: 'editor' | 'terminal' | 'files') => {
+    setBusy(app)
+    try {
+      const r = await api.open(box.repo, box.name, app)
+      toasts.ok(`opened in ${r.launched}`)
+    } catch (e) {
+      toasts.error(e)
+    } finally {
+      setBusy(null)
+    }
+  }
+  return (
+    <>
+      <button className="primary" disabled={busy !== null} onClick={() => open('editor')} title="Open the box in your editor (set editor: in ~/.agentbox/config.yaml to choose)">
+        Open in editor
+      </button>
+      <button disabled={busy !== null} onClick={() => open('terminal')} title="A terminal window in the box's directory">
+        Terminal
+      </button>
+      <button className="quiet" disabled={busy !== null} onClick={() => open('files')} title="Show the box's directory in the file manager">
+        Reveal
+      </button>
+    </>
   )
 }
 

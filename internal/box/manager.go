@@ -57,6 +57,10 @@ type Deps struct {
 	// APIPort reports the daemon's HTTP port (0 when the API is off): the
 	// `url` form of links points at the proxy there. nil behaves like 0.
 	APIPort func() int
+	// Open: how a box is opened for the user. Editor/Terminal are the
+	// configured commands ("" = detect); Launch runs them (nil = exec).
+	Editor, Terminal string
+	Launch           Launcher
 }
 
 // Manager owns every box on the machine. Methods are safe for concurrent use;

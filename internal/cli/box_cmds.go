@@ -72,7 +72,14 @@ func (a *app) prCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "pr <number>",
 		Short: "Create a box from a pull request on origin (GitHub, GitLab, Gitea)",
-		Args:  exactArgs(1, "a pull request number"),
+		Long: `Fetches the pull request's head from origin and creates box pr-<number> on it.
+
+The request's code then runs on this machine like any checkout: setup
+(package installs and their scripts) and the dev server execute whatever
+the branch contains. agentbox.yaml itself is read from your main checkout,
+never from the request. For a contributor you do not trust, pass --no-dev
+and read the diff first (agentbox ui → the box → Diff).`,
+		Args: exactArgs(1, "a pull request number"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			n, err := strconv.Atoi(args[0])
 			if err != nil || n <= 0 {
@@ -123,6 +130,45 @@ func (a *app) prCmd() *cobra.Command {
 	f.BoolVar(&opts.NoDev, "no-dev", false, "don't start the dev server")
 	f.BoolVar(&opts.KeepFailed, "keep-failed", false, "keep a box that failed to create, for debugging")
 	f.BoolVar(&opts.Terminate, "terminate", false, "terminate stray connections to the Postgres template")
+	return cmd
+}
+
+// openCmd opens a box in the editor, a terminal or the file manager.
+func (a *app) openCmd() *cobra.Command {
+	var terminal, files bool
+	cmd := &cobra.Command{
+		Use:   "open <name>",
+		Short: "Open a box in your editor (or a terminal / the file manager)",
+		Long: `Opens the box's directory in your editor: the one named by "editor:" in
+~/.agentbox/config.yaml, else the first of code, cursor, windsurf, zed, subl
+and idea on PATH. --terminal opens a terminal window there, --files the file
+manager.`,
+		Args: exactArgs(1, "a box name"),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+			repo, err := a.setup(ctx)
+			if err != nil {
+				return err
+			}
+			app := string(box.OpenEditor)
+			switch {
+			case terminal && files:
+				return usage(errors.New("pick one of --terminal and --files"))
+			case terminal:
+				app = string(box.OpenTerminal)
+			case files:
+				app = string(box.OpenFiles)
+			}
+			launched, err := a.c.OpenBox(ctx, repo.ID, args[0], app)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "opened %s in %s\n", args[0], launched)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&terminal, "terminal", false, "a terminal window in the box instead of the editor")
+	cmd.Flags().BoolVar(&files, "files", false, "the file manager instead of the editor")
 	return cmd
 }
 

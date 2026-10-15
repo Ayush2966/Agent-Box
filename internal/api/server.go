@@ -45,6 +45,7 @@ func (s *Server) Handler(requireToken bool) http.Handler {
 	mux.HandleFunc("GET "+b, s.getBox)
 	mux.HandleFunc("POST "+b+"/start", s.startBox)
 	mux.HandleFunc("POST "+b+"/stop", s.stopBox)
+	mux.HandleFunc("POST "+b+"/open", s.openBox)
 	mux.HandleFunc("POST "+b+"/merge", s.mergeBox)
 	mux.HandleFunc("DELETE "+b, s.removeBox)
 	mux.HandleFunc("GET "+b+"/logs", s.logs)
@@ -207,6 +208,25 @@ func (s *Server) getBox(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) startBox(w http.ResponseWriter, r *http.Request) {
 	noContent(w, s.M.Start(r.Context(), r.PathValue("repo"), r.PathValue("name")))
+}
+
+// openBox launches the user's editor, a terminal or the file manager on the
+// box's directory (the daemon runs on the user's machine). The app is one of
+// a fixed set; nothing from the request is executed.
+func (s *Server) openBox(w http.ResponseWriter, r *http.Request) {
+	var req OpenRequest
+	if r.ContentLength != 0 && !decode(w, r, &req) {
+		return
+	}
+	if req.App == "" {
+		req.App = string(box.OpenEditor)
+	}
+	launched, err := s.M.Open(r.PathValue("repo"), r.PathValue("name"), box.OpenApp(req.App))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, OpenResult{Launched: launched})
 }
 
 func (s *Server) stopBox(w http.ResponseWriter, r *http.Request) {

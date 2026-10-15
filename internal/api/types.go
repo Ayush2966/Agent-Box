@@ -72,3 +72,12 @@ func viewOf(i box.Info) BoxView {
 		Dirty: i.Dirty, Env: i.Env, CreatedAt: i.CreatedAt,
 	}
 }
+
+// OpenRequest picks what `POST .../open` launches on the box's directory.
+type OpenRequest struct {
+	App string `json:"app"` // editor (default) | terminal | files
+}
+
+type OpenResult struct {
+	Launched string `json:"launched"` // the program or app that was started
+}

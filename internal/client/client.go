@@ -111,6 +111,14 @@ func (c *Client) GetBox(ctx context.Context, repoID, name string) (api.BoxView, 
 	return out, c.do(ctx, "GET", boxPath(repoID, name), nil, &out)
 }
 
+// OpenBox opens the box's directory in the editor, a terminal or the file
+// manager; it returns what was launched.
+func (c *Client) OpenBox(ctx context.Context, repoID, name, app string) (string, error) {
+	var res api.OpenResult
+	err := c.do(ctx, "POST", boxPath(repoID, name)+"/open", api.OpenRequest{App: app}, &res)
+	return res.Launched, err
+}
+
 func (c *Client) StartBox(ctx context.Context, repoID, name string) error {
 	return c.do(ctx, "POST", boxPath(repoID, name)+"/start", nil, nil)
 }

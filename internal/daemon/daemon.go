@@ -88,6 +88,8 @@ type Settings struct {
 	PortRange []int  `yaml:"port_range"`
 	APIAddr   string `yaml:"api_addr"`
 	BoxesDir  string `yaml:"boxes_dir"` // where box worktrees live; "" = <home>/boxes
+	Editor    string `yaml:"editor"`    // command (or macOS app name) `agentbox open` uses; "" = detect
+	Terminal  string `yaml:"terminal"`  // terminal app/command for `agentbox open --terminal`; "" = platform default
 }
 
 func LoadSettings(path string) (Settings, error) {
@@ -253,7 +255,7 @@ func Run(ctx context.Context, p Paths) error {
 	apiPort := 0 // set once the HTTP listener is bound; `url` links point there
 	m := box.NewManager(box.Deps{Store: store, BoxesDir: boxes, LogsDir: p.Logs,
 		PortLo: settings.PortRange[0], PortHi: settings.PortRange[1], Bus: bus,
-		APIPort: func() int { return apiPort }})
+		APIPort: func() int { return apiPort }, Editor: settings.Editor, Terminal: settings.Terminal})
 	if err := m.Recover(); err != nil {
 		return err
 	}

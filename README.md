@@ -120,11 +120,12 @@ Your app must read its ports from these env vars. Boxes can't share a hard-coded
 |---|---|
 | `init` | draft `agentbox.yaml` from the repo |
 | `new <name> [--from REF] [--no-dev]` | create a box |
-| `pr <number> [--name N] [--no-dev]` | create a box from a pull request on origin (`pr-<number>`; GitHub, GitLab, Gitea) |
+| `pr <number> [--name N] [--no-dev]` | create a box from a pull request on origin (`pr-<number>`; GitHub, GitLab, Gitea). The request's code runs on your machine like any checkout; for an untrusted contributor use `--no-dev` and read the diff first |
 | `ls [--all] [--json]` | list boxes |
 | `logs <name> [-f]` | setup + dev-server output |
 | `start` / `stop <name>` | control the dev server |
 | `exec <name> -- <cmd>` | run a command in the box with its env |
+| `open <name> [--terminal\|--files]` | open the box in your editor (or a terminal / the file manager) |
 | `merge <name> [--squash]` | merge into the main checkout's current branch (never forces) |
 | `rm <name> [--force] [--keep-branch]` | remove; asks before discarding work |
 | `db refresh` | re-snapshot the source database |
@@ -154,6 +155,11 @@ Chrome, Edge and Firefox resolve `*.localhost` on their own. Safari and `curl` o
 resolver, which does not: use `curl -H 'Host: a.localhost' http://127.0.0.1:7777/`, or add
 `127.0.0.1 a.localhost` to `/etc/hosts`. Your app should use relative URLs (or honour `X-Forwarded-Host`)
 rather than redirecting to `http://localhost:3000`.
+
+`editor:` in `~/.agentbox/config.yaml` names the editor `agentbox open` and the dashboard's **Open in editor**
+use: a command on PATH (`code`, `cursor`, `zed`, …) or on macOS an app name (`"Visual Studio Code"`); without
+it, the first of code, cursor, windsurf, zed, subl and idea found on PATH. `terminal:` likewise picks the
+terminal app (macOS default: Terminal).
 
 `api_addr` in `~/.agentbox/config.yaml` must be a loopback address (`127.0.0.1:7777`, `localhost:7777`, `[::1]:7777`); the proxy and dashboard have no remote access, and a wildcard or LAN address is rejected at startup.
 
