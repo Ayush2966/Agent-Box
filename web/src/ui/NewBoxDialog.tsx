@@ -97,7 +97,7 @@ export function NewBoxDialog({ repo, repos, onClose }: { repo?: RepoView; repos:
           <label>
             Start from
             <input value={from} onChange={(e) => setFrom(e.target.value)} placeholder="HEAD" spellCheck={false} />
-            <span className="hint">A branch, tag or commit. Empty means each repo's current HEAD.</span>
+            <span className="hint">A branch, tag or commit. A branch only on origin works by its plain name. Empty means the current HEAD.</span>
           </label>
           <label className="check">
             <input type="checkbox" checked={noDev} onChange={(e) => setNoDev(e.target.checked)} /> Don't start the dev server

@@ -78,20 +78,63 @@ func Add(repo, dir, branch, from string) error {
 	if from == "" {
 		from = "HEAD"
 	}
-	if err := checkRef(repo, from); err != nil {
+	start, err := ResolveStart(repo, from)
+	if err != nil {
 		return err
 	}
-	_, err := git(repo, "worktree", "add", "-q", "-b", branch, dir, from)
+	_, err = git(repo, "worktree", "add", "-q", "-b", branch, dir, start)
 	return err
 }
 
-// checkRef rejects user-supplied refs that git would otherwise parse as
-// options ("--force" would silently mean HEAD) and refs that don't exist.
+// ResolveStart turns a user-supplied start ref into one git can use. It takes
+// the ref as given when it resolves locally; otherwise, when a bare name like
+// "release/x" matches a remote-tracking branch, it uses that (e.g.
+// "origin/release/x"), which is what a developer means by the branch name. It
+// rejects anything git would parse as an option.
+func ResolveStart(repo, ref string) (string, error) {
+	if refExists(repo, ref) {
+		return ref, nil
+	}
+	// Not local: does a remote have it? Prefer origin, else a unique match.
+	if refExists(repo, "origin/"+ref) {
+		return "origin/" + ref, nil
+	}
+	if matches := remoteMatches(repo, ref); len(matches) == 1 {
+		return matches[0], nil
+	} else if len(matches) > 1 {
+		return "", fmt.Errorf("%q matches several remotes (%s); use the full name", ref, strings.Join(matches, ", "))
+	}
+	return "", fmt.Errorf("%q is not a branch, tag or commit (if it is on a remote, run `git -C %q fetch` first)", ref, repo)
+}
+
+func refExists(dir, ref string) bool {
+	_, err := git(dir, "rev-parse", "--verify", "--quiet", "--end-of-options", ref+"^{commit}")
+	return err == nil
+}
+
+// checkRef rejects a ref (an option, or one that does not exist locally); used
+// for merge/diff bases, which must already be in the repo.
 func checkRef(dir, ref string) error {
-	if _, err := git(dir, "rev-parse", "--verify", "--quiet", "--end-of-options", ref+"^{commit}"); err != nil {
+	if !refExists(dir, ref) {
 		return fmt.Errorf("%q is not a branch, tag or commit", ref)
 	}
 	return nil
+}
+
+// remoteMatches lists the remote-tracking refs whose branch part equals ref,
+// e.g. ref "release/x" → ["origin/release/x"].
+func remoteMatches(repo, ref string) []string {
+	out, err := git(repo, "for-each-ref", "--format=%(refname:short)", "refs/remotes/*/"+ref, "refs/remotes/*/"+ref+"/")
+	if err != nil || out == "" {
+		return nil
+	}
+	var m []string
+	for _, line := range strings.Split(out, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			m = append(m, line)
+		}
+	}
+	return m
 }
 
 // Remove deletes the worktree at dir, discarding its changes. A worktree
