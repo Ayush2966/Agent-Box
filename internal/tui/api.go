@@ -19,6 +19,7 @@ type API interface {
 	StartBox(ctx context.Context, repoID, name string) error
 	StopBox(ctx context.Context, repoID, name string) error
 	RemoveBox(ctx context.Context, repoID, name string, force, keepBranch bool) error
+	OpenBox(ctx context.Context, repoID, name, app string) (string, error)
 	Merge(ctx context.Context, repoID, name string, opts box.MergeOptions) (api.MergeResult, error)
 	RefreshDB(ctx context.Context, repoID string, terminate bool) error
 	Doctor(ctx context.Context, repoID string, fix bool) ([]box.Finding, error)

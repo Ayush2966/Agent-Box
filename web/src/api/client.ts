@@ -72,6 +72,13 @@ export const api = {
   create: (opts: { repo_path: string; name: string; from?: string; no_dev?: boolean }) =>
     request<Created>('POST', '/v1/boxes', opts),
   start: (repo: string, name: string) => request<void>('POST', `${boxPath(repo, name)}/start`, undefined, 'none'),
+  /** The box's size on disk in bytes (walks the worktree). */
+  disk: (repo: string, name: string) => request<{ bytes: number }>('GET', `${boxPath(repo, name)}/disk`),
+  /** Removes stopped and failed boxes (repo === '' means every repo). */
+  prune: (repo: string, force: boolean) => request<{ pruned: { name: string; removed: boolean; error?: string }[] }>('POST', '/v1/prune', { repo, force }),
+  /** Opens the box's directory on the user's machine: editor | terminal | files. */
+  open: (repo: string, name: string, app: 'editor' | 'terminal' | 'files') =>
+    request<{ launched: string }>('POST', `${boxPath(repo, name)}/open`, { app }),
   stop: (repo: string, name: string) => request<void>('POST', `${boxPath(repo, name)}/stop`, undefined, 'none'),
   merge: (repo: string, name: string, opts: { into?: string; squash?: boolean }) =>
     request<MergeResult>('POST', `${boxPath(repo, name)}/merge`, opts),

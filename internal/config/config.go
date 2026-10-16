@@ -28,6 +28,37 @@ type Config struct {
 	Env     Env      `yaml:"env"`
 	Compose *Compose `yaml:"compose"`
 	Copy    []string `yaml:"copy"`
+	// Links hands a box the address of the same-named box in another repo:
+	// env var name → "<repo>[:url|port|addr]" (see ParseLink).
+	Links map[string]string `yaml:"links"`
+}
+
+// Link is one `links:` entry. Repo names another repo agentbox knows, by its
+// folder name or its id; Kind selects what the env var receives: "url" (the
+// proxy URL, http://<box>.<repo-id>.localhost:<port>/, stable even before the
+// other box exists), "port" (the other box's proxy port) or "addr"
+// (127.0.0.1:<port>, for server-to-server calls).
+type Link struct {
+	Repo string
+	Kind string
+}
+
+// ParseLink reads "<repo>", "<repo>:url", "<repo>:port" or "<repo>:addr".
+func ParseLink(spec string) (Link, error) {
+	repo, kind, found := strings.Cut(spec, ":")
+	if !found {
+		kind = "url"
+	}
+	repo, kind = strings.TrimSpace(repo), strings.TrimSpace(kind)
+	if repo == "" {
+		return Link{}, fmt.Errorf("links: %q: the repo name is empty", spec)
+	}
+	switch kind {
+	case "url", "port", "addr":
+	default:
+		return Link{}, fmt.Errorf("links: %q: must end in :url, :port or :addr (got %q)", spec, kind)
+	}
+	return Link{Repo: repo, Kind: kind}, nil
 }
 
 type DB struct {
@@ -55,6 +86,10 @@ type Env struct {
 	Template string            `yaml:"template"`
 	File     string            `yaml:"file"`
 	Set      map[string]string `yaml:"set"`
+	// Files are extra env files layered under env.set and the managed vars:
+	// read in order (later wins), then the box's ports/db/links win over all.
+	// Use them to inject a local config a service needs to boot.
+	Files []string `yaml:"files"`
 }
 
 // Compose describes the per-box Docker Compose stack.
@@ -78,9 +113,9 @@ var serviceName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
 var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 var knownKeys = map[string][]string{
-	"":        {"version", "setup", "dev", "ports", "proxy", "db", "env", "compose", "copy"},
+	"":        {"version", "setup", "dev", "ports", "proxy", "db", "env", "compose", "copy", "links"},
 	"db":      {"driver", "url_env", "source"},
-	"env":     {"template", "file", "set"},
+	"env":     {"template", "file", "set", "files"},
 	"compose": {"file", "services", "wait"},
 }
 
@@ -171,9 +206,9 @@ func (c *Config) validate() error {
 	}
 	if c.DB != nil {
 		switch c.DB.Driver {
-		case "postgres", "sqlite", "mysql":
+		case "postgres", "sqlite", "mysql", "mongo", "mongodb":
 		default:
-			return fmt.Errorf(`%s: db.driver must be "postgres", "mysql" or "sqlite" (got %q)`, FileName, c.DB.Driver)
+			return fmt.Errorf(`%s: db.driver must be "postgres", "mysql", "mongo" or "sqlite" (got %q)`, FileName, c.DB.Driver)
 		}
 		if !envName.MatchString(c.DB.URLEnv) {
 			return fmt.Errorf("%s: db.url_env must be a valid env var name (got %q)", FileName, c.DB.URLEnv)
@@ -195,6 +230,12 @@ func (c *Config) validate() error {
 				return fmt.Errorf("%s: db.source for mysql must look like mysql://user:pass@host:3306/database (got %q)", FileName, c.DB.Source)
 			}
 		}
+		if c.DB.Driver == "mongo" || c.DB.Driver == "mongodb" {
+			u, err := url.Parse(c.DB.Source)
+			if err != nil || (u.Scheme != "mongodb" && u.Scheme != "mongodb+srv") || u.Host == "" || len(strings.Trim(u.Path, "/")) == 0 {
+				return fmt.Errorf("%s: db.source for mongo must look like mongodb://user:pass@host:27017/database (got %q)", FileName, c.DB.Source)
+			}
+		}
 	}
 	for k := range c.Env.Set {
 		if !envName.MatchString(k) {
@@ -203,6 +244,11 @@ func (c *Config) validate() error {
 	}
 	if c.Env.Template != "" {
 		if err := localPath("env.template", c.Env.Template); err != nil {
+			return err
+		}
+	}
+	for i, f := range c.Env.Files {
+		if err := localPath(fmt.Sprintf("env.files[%d]", i), f); err != nil {
 			return err
 		}
 	}
@@ -230,6 +276,20 @@ func (c *Config) validate() error {
 	for i, p := range c.Copy {
 		if err := localPath(fmt.Sprintf("copy[%d]", i), p); err != nil {
 			return err
+		}
+	}
+	for k, spec := range c.Links {
+		if !envName.MatchString(k) {
+			return fmt.Errorf("%s: links: %q is not a valid env var name", FileName, k)
+		}
+		if seen[k] || (c.DB != nil && c.DB.URLEnv == k) {
+			return fmt.Errorf("%s: links: %q is already a port or the db url env", FileName, k)
+		}
+		if _, ok := c.Env.Set[k]; ok {
+			return fmt.Errorf("%s: links: %q is also in env.set", FileName, k)
+		}
+		if _, err := ParseLink(spec); err != nil {
+			return fmt.Errorf("%s: %w", FileName, err)
 		}
 	}
 	return nil

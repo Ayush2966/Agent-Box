@@ -63,14 +63,17 @@ macOS and Linux. Needs git ≥ 2.38, plus pg_dump/pg_restore for Postgres, mysql
     agentbox logs feature-x -f
     agentbox merge feature-x
     agentbox rm feature-x
+    agentbox pr 123            # review a pull request: box pr-123 from its head, at http://pr-123.localhost:7777/
 
 ## Step by step
 
 1. **Install** the CLI (above) and, on macOS, optionally the app: `brew install --cask Ayush2966/tap/agentbox-desktop`.
    The daemon starts itself on the first command; nothing to run by hand.
 
-2. **Describe the repo once.** In the repo root, `agentbox init` drafts `agentbox.yaml` from `package.json` and
-   friends. Fix three things before the first box:
+2. **Describe the repo once.** In the repo root, `agentbox init` drafts `agentbox.yaml`. It recognises Vite,
+   Next.js, webpack, Create React App, Angular, Nuxt, NestJS, plain Node, Go (`cmd/<name>`), Rails and Django,
+   and writes a `dev` command that already passes the box's port (`--port "$APP_PORT"`, `-p`, or `PORT` in the
+   env) plus a reproducible `setup` (`npm ci` when there is a lockfile). Check three things before the first box:
    - `setup`: the command that makes a fresh checkout runnable. Use what works in *this* repo: `npm ci`,
      `npm ci --legacy-peer-deps` when `npm install` fails on peer ranges, `go mod download`, `pip install -e .`.
    - `dev`: the command that starts the dev server **on the port agentbox hands out** (next point).
@@ -80,8 +83,8 @@ macOS and Linux. Needs git ≥ 2.38, plus pg_dump/pg_restore for Postgres, mysql
    second box fails. Both `setup` and `dev` run through `sh -c` with the box's env, so the command line can
    pass it on without touching the code:
    - webpack: `dev: npm start -- --port "$APP_PORT"` (the flag overrides `devServer.port`)
-   - Vite: `dev: npm run dev -- --host 127.0.0.1 --port "$APP_PORT" --strictPort` (without `--host`, Vite on
-     recent Node binds only `[::1]`, and the proxy dials `127.0.0.1`)
+   - Vite: `dev: npm run dev -- --port "$APP_PORT" --strictPort` (Vite on recent Node binds only `[::1]` for
+     "localhost"; the proxy tries `127.0.0.1` and then `[::1]`, so no `--host` is needed)
    - Express/Node: `app.listen(process.env.APP_PORT || 3000)`
    - Go: `flag` or `os.Getenv("APP_PORT")`
    - Docker Compose: `"${REDIS_PORT}:6379"` in the compose file and `REDIS_PORT` under `ports:`
@@ -111,6 +114,11 @@ macOS and Linux. Needs git ≥ 2.38, plus pg_dump/pg_restore for Postgres, mysql
 If `agentbox new` fails in `setup`, the box is rolled back and the last lines of output are printed; fix the
 `setup` command and run `new` again (`--keep-failed` keeps the half-built box for a look).
 
+**Keeping the config honest.** `agentbox check` validates `agentbox.yaml` and the files it names and warns about
+the classic mistakes (a dev command that never gets the port, a tracked env file). `agentbox check --setup --dev 60s`
+goes further: a temporary worktree of HEAD gets free ports like a box, `setup` runs, `dev` starts and must answer
+on its port, then everything is removed. It needs no daemon, so commit `agentbox.yaml` and add that line to CI.
+
 ## Configuration
 
 `agentbox.yaml` at the repo root (read from your main checkout, so uncommitted edits apply):
@@ -122,7 +130,7 @@ dev: npm run dev              # supervised; restarted with backoff if it crashes
 ports: [APP_PORT, API_PORT]   # each gets a free port per box
 proxy: APP_PORT               # which port http://<box>.localhost:7777 forwards to (default: the first)
 db:
-  driver: postgres            # postgres | mysql | sqlite
+  driver: postgres            # postgres | mysql | mongo | sqlite
   url_env: DATABASE_URL
   source: postgres://localhost:5432/myapp
 compose:                      # optional: a Docker Compose project per box
@@ -130,8 +138,12 @@ compose:                      # optional: a Docker Compose project per box
   services: [redis]           # default: all services
 env:
   template: .env.example      # copied and rewritten into the box's .env
+  files: [config/local.env]   # extra env files layered in (later wins; set and ports win over them)
   set: { NODE_ENV: development }
 copy: [.env.local]            # untracked files to copy from your main checkout
+links:                        # optional: the same-named box in another repo (see below)
+  API_URL: api-admin          #   http://<box>.<repo-id>.localhost:7777/  (for the browser)
+  API_ADDR: api-admin:addr    #   127.0.0.1:<its port>                     (for server-to-server)
 ```
 
 Your app must read its ports from these env vars. Boxes can't share a hard-coded port.
@@ -141,13 +153,17 @@ Your app must read its ports from these env vars. Boxes can't share a hard-coded
 | Command | |
 |---|---|
 | `init` | draft `agentbox.yaml` from the repo |
+| `check [--setup] [--dev 60s]` | validate `agentbox.yaml`; with flags, rehearse setup and the dev server in a throwaway worktree (no daemon; for CI) |
 | `new <name> [--from REF] [--no-dev]` | create a box |
+| `pr <number> [--name N] [--no-dev]` | create a box from a pull request on origin (`pr-<number>`; GitHub, GitLab, Gitea). The request's code runs on your machine like any checkout; for an untrusted contributor use `--no-dev` and read the diff first |
 | `ls [--all] [--json]` | list boxes |
 | `logs <name> [-f]` | setup + dev-server output |
 | `start` / `stop <name>` | control the dev server |
 | `exec <name> -- <cmd>` | run a command in the box with its env |
+| `open <name> [--terminal\|--files]` | open the box in your editor (or a terminal / the file manager) |
 | `merge <name> [--squash]` | merge into the main checkout's current branch (never forces) |
 | `rm <name> [--force] [--keep-branch]` | remove; asks before discarding work |
+| `prune [--all] [--force]` | remove the stopped and failed boxes (this repo, or every repo) |
 | `db refresh` | re-snapshot the source database |
 | `doctor [--fix]` | find and safely repair drift |
 | `ui [--no-open]` | open the web dashboard (signed in) |
@@ -162,9 +178,12 @@ create/start/stop/merge/remove actions as the CLI. **All boxes** at the top of t
 across repos in one table, with a filter. **New box** (`n`) can tick other repos to create the same-named
 box in each of them at once.
 
+The Logs tab streams live and has a filter box and an "errors only" toggle.
+
 `agentbox tui` is the terminal version: a live table of every box (`r` cycles repos, `/` filters),
 `enter` for a box's overview, logs and diff, `s`/`x`/`m` to start-stop, remove and merge, `e` to open
-a shell inside the box with its env, `o` to open its URL, `d` for doctor, `?` for every key.
+a shell inside the box with its env, `E` to open it in your editor, `o` to open its URL, `d` for doctor,
+`?` for every key.
 
 Every box with ports is also served at **`http://<box>.localhost:7777/`** (or
 `http://<box>.<repo-slug>.localhost:7777/` when two repos share a box name). The daemon forwards to the
@@ -175,6 +194,15 @@ Chrome, Edge and Firefox resolve `*.localhost` on their own. Safari and `curl` o
 resolver, which does not: use `curl -H 'Host: a.localhost' http://127.0.0.1:7777/`, or add
 `127.0.0.1 a.localhost` to `/etc/hosts`. Your app should use relative URLs (or honour `X-Forwarded-Host`)
 rather than redirecting to `http://localhost:3000`.
+
+`editor:` in `~/.agentbox/config.yaml` names the editor `agentbox open` and the dashboard's **Open in editor**
+use: a command on PATH (`code`, `cursor`, `zed`, …) or on macOS an app name (`"Visual Studio Code"`); without
+it, the first of code, cursor, windsurf, zed, subl and idea found on PATH. `terminal:` likewise picks the
+terminal app (macOS default: Terminal).
+
+The daemon sends a desktop notification when a box's dev server keeps crashing, when a creation fails or
+is rolled back, and when a box you created is ready (macOS via `osascript`, Linux via `notify-send`), so
+an agent's box can be left alone. `notifications: false` in `~/.agentbox/config.yaml` turns them off.
 
 `api_addr` in `~/.agentbox/config.yaml` must be a loopback address (`127.0.0.1:7777`, `localhost:7777`, `[::1]:7777`); the proxy and dashboard have no remote access, and a wildcard or LAN address is rejected at startup.
 
@@ -188,20 +216,30 @@ Each repo needs its own `agentbox.yaml`. In the dashboard, **New box** has a che
 tick them and the same box is created in each; **All boxes** then shows them side by side. `tui` cycles
 repos with `r`. Finish the same way: `merge` and `rm` in each repo.
 
-Wiring the boxes to each other:
+Wiring the boxes to each other is `links:` in `agentbox.yaml`. Each entry names an env var and another
+repo (by folder name, or by id such as `api-admin-1a2b3c` when two clones share a name); the box gets
+the address of the **same-named box** in that repo:
 
-- **Browser → API.** When a name is used in more than one repo, each box's URL is qualified:
-  `http://nvo-9743.<repo-id>.localhost:7777` (`<repo-id>` is the box's folder name, e.g. `api-admin-1a2b3c`).
-  Every box knows its own name as `AGENTBOX_NAME`, and `dev` runs through a shell, so the frontend can point
-  at the backend box of the same name without any code change:
+```yaml
+# web-panel/agentbox.yaml
+dev: npm start -- --port "$APP_PORT"
+ports: [APP_PORT]
+links:
+  REACT_APP_API_URL: api-admin        # http://nvo-9743.api-admin-1a2b3c.localhost:7777/
+  UNIFIED_ADDR: api-unified:addr      # 127.0.0.1:20007
+  UNIFIED_PORT: api-unified:port      # 20007
+```
 
-  ```yaml
-  dev: REACT_APP_API_URL="http://$AGENTBOX_NAME.api-admin-1a2b3c.localhost:7777" npm start -- --port "$APP_PORT"
-  ```
+- **`url`** (the default) is the proxy URL, for the browser: Chrome, Firefox and Edge resolve `*.localhost`, and
+  each box gets its own origin, so sessions do not bleed between boxes. It is known before the other box
+  exists, so the order of creation does not matter.
+- **`addr` / `port`** are the other box's own port, for server-to-server calls (Go, Node and curl do not
+  resolve `*.localhost` on macOS). They resolve when the other box exists: links are filled in when a box
+  is created and refreshed every time its dev server starts, in the env file (managed keys only; your own
+  lines stay) and in the process env.
 
-- **Server → server.** The system resolver (and so Go, Node and curl) does not resolve `*.localhost` on macOS:
-  call the other box's port directly (`agentbox --repo ~/code/api-admin ls --json` shows it) or add
-  `127.0.0.1 nvo-9743.api-admin-1a2b3c.localhost` to `/etc/hosts` and use the proxy URL.
+The linked repo must be one agentbox knows (run any agentbox command in it once). Links show up in the
+box's **Managed env** on the dashboard.
 
 - **Shared backends.** If the frontends are what the agents change, leave the backends on a shared dev
   environment and create boxes only in the frontend repos.
@@ -235,6 +273,12 @@ The `db.source` user needs `CREATE` and `DROP` globally plus read access to the 
 `SHOW VIEW`, `TRIGGER`, `EVENT`; routines need `SHOW_ROUTINE` on MySQL 8.0.20 and later). When the server
 has GTIDs on, the dump is taken with `--set-gtid-purged=OFF`, which needs MySQL's own `mysqldump` (MariaDB's
 rejects the flag). See `examples/node-mysql`.
+
+MongoDB works the same way: `driver: mongo`, a `mongodb://` or `mongodb+srv://` source with the database
+in the path, and `mongodump`/`mongorestore` on PATH. Each box gets `<db>_agentbox_<box>`, dumped from the
+source and renamed on restore (`--nsFrom`/`--nsTo`); `db.url_env` receives a URL with the clone's name.
+The `db.source` user needs to read the source database and create and drop the box databases. Works with a
+local server or an Atlas cluster (its Mongo is reachable from a laptop).
 
 ## Desktop app
 

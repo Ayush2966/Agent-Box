@@ -17,6 +17,12 @@ jobs:
       - run: go vet ./...
       - run: go test -race ./...
       - run: go test -tags e2e ./e2e/...
+      # The config check as a project would run it in CI: no daemon, a throwaway
+      # worktree. The example is copied out because it lives inside this repo.
+      - run: |
+          tmp=$(mktemp -d) && cp -R examples/sqlite/. "$tmp" && git -C "$tmp" init -q && git -C "$tmp" add -A
+          git -C "$tmp" -c user.name=ci -c user.email=ci@example.com commit -qm init
+          go run ./cmd/agentbox check --setup --dev 60s --repo "$tmp"
 
   # The Go side must build and pass without a dashboard build present.
   go-without-ui:
@@ -69,6 +75,26 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y mysql-client
       - run: go test -race ./internal/db/...
       - run: go test -tags e2e -run MySQL ./e2e/...
+
+  mongo:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:8
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1})'" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      AGENTBOX_TEST_MONGO_URL: mongodb://127.0.0.1:27017/myapp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.24' }
+      # The MongoDB Database Tools (mongodump/mongorestore) are not in the base image.
+      - run: |
+          curl -fsSL https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2404-x86_64-100.12.2.tgz -o tools.tgz
+          tar xzf tools.tgz && sudo cp mongodb-database-tools-*/bin/* /usr/local/bin/
+      - run: go test -race -run Mongo ./internal/db/...
 
   docker:
     runs-on: ubuntu-latest

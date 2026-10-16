@@ -20,7 +20,7 @@ import { useKey } from './bits'
 import { ConfirmDialog } from './confirm'
 
 type Auth = 'checking' | 'in' | 'out'
-type Dialog = 'none' | 'new' | 'doctor' | 'refresh'
+type Dialog = 'none' | 'new' | 'doctor' | 'refresh' | 'prune'
 const EVENTS: BoxEventType[] = ['box.created', 'box.state', 'box.step', 'box.removed']
 
 export function App() {
@@ -124,7 +124,7 @@ export function App() {
           {auth === 'in' && route.kind === 'all' && <AllBoxes boxes={Object.values(state.byId)} steps={state.steps} initialQuery={route.q} onNew={() => setDialog('new')} />}
           {auth === 'in' && repo && route.kind !== 'box' && route.kind !== 'all' && (
             <>
-              <RepoHeader repo={repo} onNew={() => setDialog('new')} onDoctor={() => setDialog('doctor')} onRefreshDB={() => setDialog('refresh')} />
+              <RepoHeader repo={repo} onNew={() => setDialog('new')} onDoctor={() => setDialog('doctor')} onRefreshDB={() => setDialog('refresh')} onPrune={() => setDialog('prune')} />
               <BoxTable boxes={selectBoxes(state, repo.id)} steps={state.steps} repo={repo} onOpen={(b) => navigate({ kind: 'box', repo: b.repo, name: b.name })} />
             </>
           )}
@@ -136,8 +136,31 @@ export function App() {
       {dialog === 'new' && summaries.length > 0 && <NewBoxDialog repo={route.kind === 'all' ? undefined : repo} repos={summaries} onClose={closeDialog} />}
       {dialog === 'doctor' && repo && <DoctorPanel repo={repo} onClose={closeDialog} />}
       {dialog === 'refresh' && repo && <RefreshDialog repo={repo} onClose={closeDialog} />}
+      {dialog === 'prune' && repo && <PruneDialog repo={repo} onClose={closeDialog} />}
       <Toasts />
     </div>
+  )
+}
+
+function PruneDialog({ repo, onClose }: { repo: RepoView; onClose: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const go = async () => {
+    setBusy(true)
+    try {
+      const { pruned } = await api.prune(repo.id, false)
+      const removed = pruned.filter((p) => p.removed).length
+      const kept = pruned.length - removed
+      toasts.ok(`removed ${removed} box${removed === 1 ? '' : 'es'}`, kept ? `${kept} kept (unmerged work; remove by hand)` : undefined)
+      onClose()
+    } catch (e) {
+      toasts.error(e)
+      setBusy(false)
+    }
+  }
+  return (
+    <ConfirmDialog title="Prune stopped and failed boxes?" confirmLabel="Prune" busy={busy} onCancel={onClose} onConfirm={() => void go()}>
+      <p>Removes every stopped or failed box in this repo: stops it, drops its database copy, frees its ports and deletes its worktree. Running and ready boxes are left alone, and a box with unmerged work is kept.</p>
+    </ConfirmDialog>
   )
 }
 

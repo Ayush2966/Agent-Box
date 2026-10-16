@@ -199,3 +199,37 @@ func TestRemovingBoxPage(t *testing.T) {
 		t.Fatalf("%d %q", code, body)
 	}
 }
+
+// A dev server that binds only [::1] (what Vite does for "localhost" on recent
+// Node) is still reached, because the proxy falls back from 127.0.0.1 to ::1.
+func TestProxyReachesAnIPv6OnlyDevServer(t *testing.T) {
+	l, err := net.Listen("tcp6", "[::1]:0")
+	if err != nil {
+		t.Skip("no IPv6 loopback:", err)
+	}
+	ts := &httptest.Server{Listener: l, Config: &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "v6 says hi")
+	})}}
+	ts.Start()
+	t.Cleanup(ts.Close)
+	port := l.Addr().(*net.TCPAddr).Port
+	h := handlerFor(map[string]Target{"a": {Repo: "r1", Name: "a", State: "running", Port: port}}, nil)
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "http://a.localhost:7777/", nil)
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "v6 says hi") {
+		t.Fatalf("status %d body %q", rec.Code, rec.Body.String())
+	}
+}
+
+func TestProxyStillReports502WhenNothingListens(t *testing.T) {
+	l, _ := net.Listen("tcp", "127.0.0.1:0")
+	port := l.Addr().(*net.TCPAddr).Port
+	l.Close() // nothing on v4 or v6 now
+	h := handlerFor(map[string]Target{"a": {Repo: "r1", Name: "a", State: "running", Port: port}}, nil)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("GET", "http://a.localhost:7777/", nil))
+	if rec.Code != 502 || !strings.Contains(rec.Body.String(), "not answering") {
+		t.Fatalf("status %d body %q", rec.Code, rec.Body.String()[:min(200, len(rec.Body.String()))])
+	}
+}

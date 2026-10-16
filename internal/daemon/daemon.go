@@ -25,6 +25,7 @@ import (
 	"github.com/Ayush2966/Agent-Box/internal/api"
 	"github.com/Ayush2966/Agent-Box/internal/box"
 	"github.com/Ayush2966/Agent-Box/internal/events"
+	"github.com/Ayush2966/Agent-Box/internal/notify"
 	"github.com/Ayush2966/Agent-Box/internal/ports"
 	"github.com/Ayush2966/Agent-Box/internal/proxy"
 	"github.com/Ayush2966/Agent-Box/internal/state"
@@ -88,7 +89,15 @@ type Settings struct {
 	PortRange []int  `yaml:"port_range"`
 	APIAddr   string `yaml:"api_addr"`
 	BoxesDir  string `yaml:"boxes_dir"` // where box worktrees live; "" = <home>/boxes
+	Editor    string `yaml:"editor"`    // command (or macOS app name) `agentbox open` uses; "" = detect
+	Terminal  string `yaml:"terminal"`  // terminal app/command for `agentbox open --terminal`; "" = platform default
+	// Notifications: desktop notifications for crashed dev servers and finished
+	// creations (osascript on macOS, notify-send on Linux). Default on.
+	Notifications *bool `yaml:"notifications"`
 }
+
+// Notify reports whether desktop notifications are wanted (the default).
+func (s Settings) Notify() bool { return s.Notifications == nil || *s.Notifications }
 
 func LoadSettings(path string) (Settings, error) {
 	s := Settings{PortRange: []int{ports.DefaultLo, ports.DefaultHi}, APIAddr: "127.0.0.1:7777"}
@@ -250,10 +259,19 @@ func Run(ctx context.Context, p Paths) error {
 	defer store.Close()
 
 	bus := events.NewBus()
+	apiPort := 0 // set once the HTTP listener is bound; `url` links point there
 	m := box.NewManager(box.Deps{Store: store, BoxesDir: boxes, LogsDir: p.Logs,
-		PortLo: settings.PortRange[0], PortHi: settings.PortRange[1], Bus: bus})
+		PortLo: settings.PortRange[0], PortHi: settings.PortRange[1], Bus: bus,
+		APIPort: func() int { return apiPort }, Editor: settings.Editor, Terminal: settings.Terminal})
 	if err := m.Recover(); err != nil {
 		return err
+	}
+	if settings.Notify() {
+		if send := notify.System(); send != nil {
+			go notify.Run(ctx, bus, send)
+		} else {
+			slog.Info("desktop notifications unavailable on this platform")
+		}
 	}
 	_ = os.Remove(p.Sock) // stale socket from a crashed daemon (the home lock proves nobody owns it)
 	ul, err := net.Listen("unix", p.Sock)
@@ -268,6 +286,9 @@ func Run(ctx context.Context, p Paths) error {
 	// URLs and login links need the port that was actually chosen.
 	apiAddr := ""
 	tl, err := net.Listen("tcp", settings.APIAddr)
+	if err == nil {
+		apiPort = tl.Addr().(*net.TCPAddr).Port
+	}
 	if err != nil {
 		slog.Warn("HTTP API disabled", "addr", settings.APIAddr, "err", err)
 		_ = os.Remove(p.APIAddr)

@@ -492,6 +492,19 @@ func (m Model) shell(b api.BoxView) tea.Cmd {
 	return tea.ExecProcess(c, func(err error) tea.Msg { return shellDoneMsg{err} })
 }
 
+// openEditor asks the daemon to open the box in the configured editor; it
+// opens in its own window, so the TUI keeps running.
+func (m Model) openEditor(b api.BoxView) tea.Cmd {
+	a, ctx := m.api, m.ctx
+	return func() tea.Msg {
+		what, err := a.OpenBox(ctx, b.Repo, b.Name, "editor")
+		if err != nil {
+			return doneMsg{"", err}
+		}
+		return doneMsg{"opened " + b.Name + " in " + what, nil}
+	}
+}
+
 func openBrowser(u string) error {
 	var c *exec.Cmd
 	if runtime.GOOS == "darwin" {

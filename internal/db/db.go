@@ -42,6 +42,8 @@ func New(cfg *config.DB, repoRoot string, opts Options) (Driver, error) {
 		return NewPostgres(cfg.Source, opts)
 	case "mysql":
 		return NewMySQL(cfg.Source)
+	case "mongo", "mongodb":
+		return NewMongo(cfg.Source)
 	}
 	return nil, fmt.Errorf("unknown db driver %q", cfg.Driver)
 }

@@ -41,14 +41,21 @@ func TestParseErrors(t *testing.T) {
 		{"unknown nested key", "version: 1\ndb:\n  drivr: sqlite", `unknown key "db.drivr" (did you mean "driver"?)`},
 		{"bad port name", "version: 1\nports: [app-port]", `"app-port" is not a valid env var name`},
 		{"duplicate port", "version: 1\nports: [A, A]", `"A" listed twice`},
-		{"bad driver", "version: 1\ndb: {driver: mongo, url_env: X, source: y}", "db.driver must be"},
+		{"bad driver", "version: 1\ndb: {driver: redis, url_env: X, source: y}", "db.driver must be"},
+		{"bad mongo source", "version: 1\ndb: {driver: mongo, url_env: X, source: y}", "db.source for mongo must look like"},
 		{"url_env in ports", "version: 1\nports: [X]\ndb: {driver: sqlite, url_env: X, source: a.db}", "also listed in ports"},
 		{"missing source", "version: 1\ndb: {driver: sqlite, url_env: X}", "db.source is required"},
 		{"escaping copy path", "version: 1\ncopy: [../secret]", "must be a relative path inside the repo"},
 		{"absolute template", "version: 1\nenv: {template: /etc/passwd}", "must be a relative path inside the repo"},
+		{"escaping env file", "version: 1\nenv: {files: [../secret.env]}", "must be a relative path inside the repo"},
 		{"escaping sqlite source", "version: 1\ndb: {driver: sqlite, url_env: X, source: 'file:../x.db'}", "must be a relative path inside the repo"},
 		{"bad set key", "version: 1\nenv: {set: {'A-B': x}}", `env.set: "A-B" is not a valid env var name`},
 		{"empty file", "", "is empty"},
+		{"bad link name", "version: 1\nlinks: {'a-b': api}", `links: "a-b" is not a valid env var name`},
+		{"link clashes with port", "version: 1\nports: [X]\nlinks: {X: api}", `links: "X" is already a port`},
+		{"link clashes with set", "version: 1\nenv: {set: {X: y}}\nlinks: {X: api}", `links: "X" is also in env.set`},
+		{"bad link kind", "version: 1\nlinks: {X: 'api:host'}", "must end in :url, :port or :addr"},
+		{"empty link repo", "version: 1\nlinks: {X: ':port'}", "the repo name is empty"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -145,5 +152,26 @@ func TestMySQLDriverConfig(t *testing.T) {
 	}
 	if _, err := Parse([]byte("version: 1\ndb:\n  driver: oracle\n  url_env: X\n  source: y\n")); err == nil || !strings.Contains(err.Error(), `"mysql"`) {
 		t.Fatalf("driver list in the error: %v", err)
+	}
+}
+
+func TestLinks(t *testing.T) {
+	c, err := Parse([]byte("version: 1\nports: [WEB_PORT]\nlinks:\n  API_URL: pl-api-admin-service\n  API_PORT: pl-api-admin-service:port\n  API_ADDR: 'pl-api-admin-service-1a2b3c:addr'\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Links) != 3 {
+		t.Fatalf("links: %+v", c.Links)
+	}
+	for spec, want := range map[string]Link{
+		"api":            {Repo: "api", Kind: "url"},
+		"api:url":        {Repo: "api", Kind: "url"},
+		"api:port":       {Repo: "api", Kind: "port"},
+		" api-1a2b:addr": {Repo: "api-1a2b", Kind: "addr"},
+	} {
+		got, err := ParseLink(spec)
+		if err != nil || got != want {
+			t.Errorf("ParseLink(%q) = %+v, %v; want %+v", spec, got, err, want)
+		}
 	}
 }

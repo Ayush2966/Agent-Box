@@ -4,6 +4,7 @@
 package proxy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Target is what Lookup resolves a host to.
@@ -63,7 +65,26 @@ func New(o Options) *Handler {
 	// One transport for every box, so idle connections are pooled and bounded.
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.MaxIdleConnsPerHost = 32
+	tr.DialContext = dialLoopback
 	return &Handler{o: o, transport: tr}
+}
+
+// dialLoopback connects to a box's port on 127.0.0.1 and, when nothing
+// listens there, on [::1]: dev servers that bind "localhost" on recent Node
+// (Vite among them) listen on IPv6 only, and the box would otherwise answer
+// "connection refused" while it is up.
+func dialLoopback(ctx context.Context, network, addr string) (net.Conn, error) {
+	d := &net.Dialer{Timeout: 10 * time.Second, KeepAlive: 30 * time.Second}
+	c, err := d.DialContext(ctx, network, addr)
+	host, port, splitErr := net.SplitHostPort(addr)
+	if err == nil || splitErr != nil || host != "127.0.0.1" {
+		return c, err
+	}
+	c6, err6 := d.DialContext(ctx, "tcp6", net.JoinHostPort("::1", port))
+	if err6 != nil {
+		return nil, err // the IPv4 error is the one to report
+	}
+	return c6, nil
 }
 
 // IsProxyHost reports whether a Host header names a box (ends in ".localhost").

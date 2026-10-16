@@ -54,6 +54,13 @@ type Deps struct {
 	Bus         *events.Bus
 	ProcOptions proc.Options
 	Compose     compose.Executor // docker; nil = the real CLI
+	// APIPort reports the daemon's HTTP port (0 when the API is off): the
+	// `url` form of links points at the proxy there. nil behaves like 0.
+	APIPort func() int
+	// Open: how a box is opened for the user. Editor/Terminal are the
+	// configured commands ("" = detect); Launch runs them (nil = exec).
+	Editor, Terminal string
+	Launch           Launcher
 }
 
 // Manager owns every box on the machine. Methods are safe for concurrent use;
@@ -151,10 +158,18 @@ func (m *Manager) Validate(opts NewOptions) (state.Repo, *config.Config, error) 
 			return repo, nil, errs.New(errs.Invalid, "env.template %s not found in %s", t, repo.Path)
 		}
 	}
+	for _, f := range cfg.Env.Files {
+		if _, err := os.Stat(filepath.Join(repo.Path, f)); err != nil {
+			return repo, nil, errs.New(errs.Invalid, "env.files: %s not found in %s", f, repo.Path)
+		}
+	}
 	for _, c := range cfg.Copy {
 		if _, err := os.Stat(filepath.Join(repo.Path, c)); err != nil {
 			return repo, nil, errs.New(errs.Invalid, "copy: %s not found in %s", c, repo.Path)
 		}
+	}
+	if err := m.checkLinks(cfg); err != nil {
+		return repo, nil, err
 	}
 	if _, err := m.d.Store.GetBox(repo.ID, opts.Name); err == nil {
 		return repo, nil, errs.New(errs.Exists, "box %q already exists", opts.Name).
@@ -308,7 +323,7 @@ func (m *Manager) Build(ctx context.Context, b state.Box, cfg *config.Config, op
 	}
 
 	begin(StepEnv)
-	if err := writeEnv(repo.Path, cfg, b); err != nil {
+	if err := m.writeEnv(repo.Path, cfg, b); err != nil {
 		return fail(StepEnv, err)
 	}
 	if err := hook(StepEnv); err != nil {
@@ -345,7 +360,7 @@ func (m *Manager) Build(ctx context.Context, b state.Box, cfg *config.Config, op
 		if err != nil {
 			return fail(StepSetup, err)
 		}
-		if err := runSetup(ctx, cfg.Setup, b.Dir, processEnv(envVars(cfg, b)), logw); err != nil {
+		if err := runSetup(ctx, cfg.Setup, b.Dir, processEnv(m.envVars(cfg, b)), logw); err != nil {
 			return fail(StepSetup, err)
 		}
 		if err := hook(StepSetup); err != nil {
@@ -583,7 +598,7 @@ func (m *Manager) stack(cfg *config.Config, b state.Box) (*compose.Stack, error)
 	}
 	return &compose.Stack{
 		Project: compose.ProjectName(b.RepoID, b.Name), Dir: b.Dir, File: file, EnvFile: cfg.Env.File,
-		Services: cfg.Compose.Services, Wait: cfg.Compose.WaitTimeout(), Env: processEnv(envVars(cfg, b)),
+		Services: cfg.Compose.Services, Wait: cfg.Compose.WaitTimeout(), Env: processEnv(m.envVars(cfg, b)),
 		Exec: m.d.Compose, Log: logw,
 	}, nil
 }
@@ -604,7 +619,7 @@ func (m *Manager) startProc(b state.Box, cfg *config.Config) (*proc.Proc, error)
 		return nil, err
 	}
 	repoID, name := b.RepoID, b.Name
-	p := proc.New(proc.Spec{Command: cfg.Dev, Dir: b.Dir, Env: processEnv(envVars(cfg, b)), Out: logw}, m.d.ProcOptions,
+	p := proc.New(proc.Spec{Command: cfg.Dev, Dir: b.Dir, Env: processEnv(m.envVars(cfg, b)), Out: logw}, m.d.ProcOptions,
 		func(s proc.Status) { m.onProcChange(repoID, name, s) })
 	if err := p.Start(); err != nil {
 		return nil, err
@@ -632,13 +647,15 @@ func (m *Manager) saveRunning(b state.Box, p *proc.Proc) (state.Box, error) {
 	if err := m.d.Store.UpdateBox(b); err != nil {
 		return b, err
 	}
+	var extra map[string]any
 	if st := p.Status(); st.GaveUp {
 		b.State, b.PID, b.LastError = state.Stopped, 0, st.LastError
 		if err := m.d.Store.UpdateBox(b); err != nil {
 			return b, err
 		}
+		extra = map[string]any{"reason": "crashed"}
 	}
-	m.publish(events.BoxState, b, nil)
+	m.publish(events.BoxState, b, extra)
 	return b, nil
 }
 
@@ -652,14 +669,16 @@ func (m *Manager) onProcChange(repoID, name string, s proc.Status) {
 	if s.LastError != "" {
 		b.LastError = s.LastError
 	}
+	var extra map[string]any
 	if s.GaveUp {
 		b.State, b.PID = state.Stopped, 0
+		extra = map[string]any{"reason": "crashed"} // tells a crash loop from `agentbox stop`
 	}
 	if err := m.d.Store.UpdateBox(b); err != nil {
 		slog.Warn("update box after process change", "box", b.ID(), "err", err)
 		return
 	}
-	m.publish(events.BoxState, b, nil)
+	m.publish(events.BoxState, b, extra)
 }
 
 type undoStack []func() error
@@ -675,7 +694,42 @@ func (u undoStack) run() {
 }
 
 // envVars are the agentbox-managed variables, in the spec's precedence order.
-func envVars(cfg *config.Config, b state.Box) []envfile.KV {
+// envVars are the variables agentbox manages for a box: env.set, its ports,
+// the database URL, its identity, Compose's project name and its links. Links
+// resolve now, so a `port`/`addr` link to a box that does not exist yet is
+// empty until the next start (Start refreshes the env file).
+func (m *Manager) envVars(cfg *config.Config, b state.Box) []envfile.KV {
+	var kv []envfile.KV
+	kv = append(kv, m.fileVars(cfg, b)...) // lowest precedence
+	kv = append(kv, baseEnvVars(cfg, b)...)
+	kv = append(kv, m.linkVars(cfg, b)...)
+	return kv
+}
+
+// fileVars reads env.files in order (later wins), overridden in turn by
+// env.set and the managed vars. A file that cannot be read is skipped with a
+// warning (New's preflight already checked they exist).
+func (m *Manager) fileVars(cfg *config.Config, b state.Box) []envfile.KV {
+	if len(cfg.Env.Files) == 0 {
+		return nil
+	}
+	repo, err := m.d.Store.RepoByID(b.RepoID)
+	if err != nil {
+		return nil
+	}
+	var kv []envfile.KV
+	for _, f := range cfg.Env.Files {
+		data, err := os.ReadFile(filepath.Join(repo.Path, f))
+		if err != nil {
+			slog.Warn("env.files unreadable", "file", f, "err", err)
+			continue
+		}
+		kv = append(kv, envfile.Parse(data)...)
+	}
+	return kv
+}
+
+func baseEnvVars(cfg *config.Config, b state.Box) []envfile.KV {
 	var kv []envfile.KV
 	for _, k := range slices.Sorted(maps.Keys(cfg.Env.Set)) {
 		kv = append(kv, envfile.KV{Key: k, Value: cfg.Env.Set[k]})
@@ -697,12 +751,101 @@ func processEnv(vars []envfile.KV) []string {
 	return append(os.Environ(), envfile.Pairs(vars)...)
 }
 
-func writeEnv(repoRoot string, cfg *config.Config, b state.Box) error {
+// linkVars resolves `links:`: for each, the same-named box in the linked repo.
+func (m *Manager) linkVars(cfg *config.Config, b state.Box) []envfile.KV {
+	if len(cfg.Links) == 0 {
+		return nil
+	}
+	repos, _ := m.d.Store.Repos()
+	var out []envfile.KV
+	for _, k := range slices.Sorted(maps.Keys(cfg.Links)) {
+		l, err := config.ParseLink(cfg.Links[k])
+		if err != nil {
+			continue // validated by config.Load
+		}
+		val := ""
+		if targets := matchRepos(repos, l.Repo); len(targets) == 1 {
+			target := targets[0]
+			switch l.Kind {
+			case "url":
+				if m.d.APIPort != nil {
+					if p := m.d.APIPort(); p != 0 {
+						val = fmt.Sprintf("http://%s.%s.localhost:%d/", b.Name, target.ID, p)
+					}
+				}
+			default:
+				if tb, err := m.d.Store.GetBox(target.ID, b.Name); err == nil {
+					if p := m.proxyPort(tb); p != 0 {
+						val = strconv.Itoa(p)
+						if l.Kind == "addr" {
+							val = "127.0.0.1:" + val
+						}
+					}
+				}
+			}
+		}
+		if val == "" {
+			slog.Warn("link not resolved yet", "box", b.RepoID+"/"+b.Name, "env", k, "link", cfg.Links[k])
+		}
+		out = append(out, envfile.KV{Key: k, Value: val})
+	}
+	return out
+}
+
+// matchRepos finds the repos a link names: by id, or by folder name.
+func matchRepos(repos []state.Repo, spec string) []state.Repo {
+	var out []state.Repo
+	for _, r := range repos {
+		if r.ID == spec || filepath.Base(r.Path) == spec {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// checkLinks refuses a config whose links name repos agentbox does not know
+// (or cannot tell apart), before any step of New runs.
+func (m *Manager) checkLinks(cfg *config.Config) error {
+	if len(cfg.Links) == 0 {
+		return nil
+	}
+	repos, err := m.d.Store.Repos()
+	if err != nil {
+		return err
+	}
+	for _, k := range slices.Sorted(maps.Keys(cfg.Links)) {
+		l, err := config.ParseLink(cfg.Links[k])
+		if err != nil {
+			return errs.New(errs.Invalid, "%v", err)
+		}
+		switch targets := matchRepos(repos, l.Repo); len(targets) {
+		case 1:
+		case 0:
+			return errs.New(errs.Invalid, "links: %s: repo %q is not known to agentbox", k, l.Repo).
+				WithHint("run `agentbox ls` (or any agentbox command) inside that repo once, then try again")
+		default:
+			var ids []string
+			for _, t := range targets {
+				ids = append(ids, t.ID)
+			}
+			return errs.New(errs.Invalid, "links: %s: %q matches several repos (%s)", k, l.Repo, strings.Join(ids, ", ")).
+				WithHint("use the repo id instead of its folder name")
+		}
+	}
+	return nil
+}
+
+func (m *Manager) writeEnv(repoRoot string, cfg *config.Config, b state.Box) error {
 	for _, rel := range cfg.Copy {
 		if err := copyFile(filepath.Join(repoRoot, rel), filepath.Join(b.Dir, rel)); err != nil {
 			return err
 		}
 	}
+	return m.renderEnvFile(repoRoot, cfg, b)
+}
+
+// renderEnvFile writes the box's env file from env.template plus the managed vars.
+func (m *Manager) renderEnvFile(repoRoot string, cfg *config.Config, b state.Box) error {
 	var tmpl []byte
 	if cfg.Env.Template != "" {
 		var err error
@@ -714,7 +857,22 @@ func writeEnv(repoRoot string, cfg *config.Config, b state.Box) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(dst, envfile.Render(tmpl, envVars(cfg, b)), 0o600)
+	return os.WriteFile(dst, envfile.Render(tmpl, m.envVars(cfg, b)), 0o600)
+}
+
+// refreshEnvFile updates the managed keys of the box's env file in place —
+// links may have resolved since the box was created — and keeps every other
+// line, including edits made inside the box. A missing file is written again.
+func (m *Manager) refreshEnvFile(repoRoot string, cfg *config.Config, b state.Box) error {
+	dst := filepath.Join(b.Dir, cfg.Env.File)
+	cur, err := os.ReadFile(dst)
+	if errors.Is(err, os.ErrNotExist) {
+		return m.renderEnvFile(repoRoot, cfg, b)
+	}
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, envfile.Render(cur, m.envVars(cfg, b)), 0o600)
 }
 
 func copyFile(src, dst string) error {

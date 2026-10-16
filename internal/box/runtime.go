@@ -76,7 +76,7 @@ func (m *Manager) info(b state.Box) Info {
 	}
 	if cfg != nil {
 		i.Env = map[string]string{}
-		for _, kv := range envVars(cfg, b) {
+		for _, kv := range m.envVars(cfg, b) {
 			i.Env[kv.Key] = kv.Value
 		}
 	}
@@ -125,6 +125,9 @@ func (m *Manager) Start(ctx context.Context, repoID, name string) error {
 	}
 	if cfg.Dev == "" {
 		return nil // stack only
+	}
+	if err := m.refreshEnvFile(repo.Path, cfg, b); err != nil {
+		return errs.From(err).WithStep(StepEnv)
 	}
 	p, err := m.startProc(b, cfg)
 	if err != nil {

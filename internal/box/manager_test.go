@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"github.com/Ayush2966/Agent-Box/internal/envfile"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -458,6 +460,120 @@ func TestRemoveSQLiteBoxAfterConfigIsDeletedHasNoDBWarning(t *testing.T) {
 	// drops it; there is nothing to warn about.
 	if err := m.Remove(ctx, b.RepoID, "a", RemoveOptions{Force: true}); err != nil {
 		t.Fatalf("rm of a sqlite box after agentbox.yaml was deleted: %v", err)
+	}
+	assertGone(t, m, repo, "a")
+}
+
+// readEnvFile parses KEY=value lines the way the app would see them.
+func readEnvFile(t *testing.T, path string) map[string]string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]string{}
+	for _, kv := range envfile.Parse(data) {
+		out[kv.Key] = kv.Value
+	}
+	return out
+}
+
+func TestLinksResolveToSameNamedBoxesInOtherRepos(t *testing.T) {
+	m := newTestManager(t)
+	m.d.APIPort = func() int { return 7777 }
+	backend := newSQLiteRepo(t, sqliteConfig) // ports [APP_PORT, API_PORT]; proxy = APP_PORT
+	br, err := m.ResolveRepo(backend)         // a link target must be a repo agentbox knows
+	if err != nil {
+		t.Fatal(err)
+	}
+	frontend := testutil.NewRepo(t, map[string]string{".gitignore": ".env\n"})
+	testutil.WriteFiles(t, frontend, map[string]string{"agentbox.yaml": fmt.Sprintf(
+		"version: 1\ndev: sleep 30\nports: [WEB_PORT]\nlinks:\n  API_URL: %[1]s\n  API_PORT: %[1]s:port\n  API_ADDR: %[1]s:addr\n", filepath.Base(backend))})
+
+	// The frontend box first: the backend box does not exist yet.
+	fb, err := m.New(ctx, NewOptions{RepoPath: frontend, Name: "x", NoDev: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := readEnvFile(t, filepath.Join(fb.Dir, ".env"))
+	if want := "http://x." + br.ID + ".localhost:7777/"; env["API_URL"] != want {
+		t.Fatalf("API_URL = %q, want %q (the url form never needs the other box)", env["API_URL"], want)
+	}
+	if env["API_PORT"] != "" || env["API_ADDR"] != "" {
+		t.Fatalf("port/addr resolved before the backend box exists: %q %q", env["API_PORT"], env["API_ADDR"])
+	}
+
+	// Now the backend box, then an edit inside the frontend box, then start.
+	bb, err := m.New(ctx, NewOptions{RepoPath: backend, Name: "x", NoDev: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, _ := os.OpenFile(filepath.Join(fb.Dir, ".env"), os.O_APPEND|os.O_WRONLY, 0o600)
+	fmt.Fprintln(f, "MINE=kept")
+	f.Close()
+	if err := m.Start(ctx, fb.RepoID, "x"); err != nil {
+		t.Fatal(err)
+	}
+	env = readEnvFile(t, filepath.Join(fb.Dir, ".env"))
+	port := strconv.Itoa(bb.Ports["APP_PORT"])
+	if env["API_PORT"] != port || env["API_ADDR"] != "127.0.0.1:"+port {
+		t.Fatalf("after start: API_PORT=%q API_ADDR=%q, want %s", env["API_PORT"], env["API_ADDR"], port)
+	}
+	if env["MINE"] != "kept" || env["WEB_PORT"] == "" {
+		t.Fatalf("start must keep the box's own lines and the managed ones: %+v", env)
+	}
+	info, err := m.Info(fb.RepoID, "x")
+	if err != nil || info.Env["API_PORT"] != port || info.Env["API_URL"] == "" {
+		t.Fatalf("Info.Env: %+v %v", info.Env, err)
+	}
+}
+
+func TestLinksRefuseRepoAgentboxDoesNotKnow(t *testing.T) {
+	m := newTestManager(t)
+	repo := testutil.NewRepo(t, map[string]string{".gitignore": ".env\n"})
+	testutil.WriteFiles(t, repo, map[string]string{"agentbox.yaml": "version: 1\nlinks:\n  API_URL: nope\n"})
+	_, err := m.New(ctx, NewOptions{RepoPath: repo, Name: "x", NoDev: true})
+	if e := errs.From(err); e == nil || e.Code != errs.Invalid || !strings.Contains(e.Error(), `repo "nope" is not known`) {
+		t.Fatalf("err = %v", err)
+	}
+	assertGone(t, m, repo, "x")
+}
+
+func TestEnvFilesLayerUnderSetAndManaged(t *testing.T) {
+	m := newTestManager(t)
+	repo := testutil.NewRepo(t, map[string]string{
+		".gitignore":   ".env\n",
+		"base.env":     "SHARED=base\nDB_HOST=localhost\nONLY_BASE=1\n",
+		"local.env":    "SHARED=local\nAPI_KEY=secret\n",
+		".env.example": "FROM_TEMPLATE=1\nSHARED=template\n",
+	})
+	testutil.WriteFiles(t, repo, map[string]string{"agentbox.yaml": "version: 1\ndev: sleep 30\nports: [APP_PORT]\n" +
+		"env:\n  template: .env.example\n  files: [base.env, local.env]\n  set: {APP_PORT_NOTE: n, SHARED: wins}\n"})
+	b, err := m.New(ctx, NewOptions{RepoPath: repo, Name: "a", NoDev: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := readEnvFile(t, filepath.Join(b.Dir, ".env"))
+	// later file wins over earlier; env.set wins over files; template keys kept
+	checks := map[string]string{"ONLY_BASE": "1", "API_KEY": "secret", "DB_HOST": "localhost", "SHARED": "wins", "FROM_TEMPLATE": "1"}
+	for k, want := range checks {
+		if env[k] != want {
+			t.Errorf("%s = %q, want %q (full: %+v)", k, env[k], want, env)
+		}
+	}
+	// the managed port is present and numeric
+	if env["APP_PORT"] == "" || env["APP_PORT"] == "0" {
+		t.Errorf("APP_PORT = %q", env["APP_PORT"])
+	}
+}
+
+func TestEnvFilesMustExist(t *testing.T) {
+	m := newTestManager(t)
+	repo := testutil.NewRepo(t, map[string]string{".gitignore": ".env\n"})
+	testutil.WriteFiles(t, repo, map[string]string{"agentbox.yaml": "version: 1\ndev: sleep 30\nenv:\n  files: [missing.env]\n"})
+	_, err := m.New(ctx, NewOptions{RepoPath: repo, Name: "a", NoDev: true})
+	if e := errs.From(err); e == nil || e.Code != errs.Invalid || !strings.Contains(e.Error(), "env.files: missing.env not found") {
+		t.Fatalf("err = %v", err)
 	}
 	assertGone(t, m, repo, "a")
 }

@@ -8,6 +8,8 @@ export function LogView({ repo, name }: { repo: string; name: string }) {
   const [lines, setLines] = useState<string[]>([])
   const [conn, setConn] = useState<SSEState>('connecting')
   const [follow, setFollow] = useState(true)
+  const [filter, setFilter] = useState('')
+  const [errorsOnly, setErrorsOnly] = useState(false)
   const pre = useRef<HTMLPreElement>(null)
 
   useEffect(() => {
@@ -38,19 +40,28 @@ export function LogView({ repo, name }: { repo: string; name: string }) {
     setFollow(el.scrollHeight - el.scrollTop - el.clientHeight < 8)
   }
 
+  const q = filter.trim().toLowerCase()
+  const errorRe = /\b(error|err|fail|failed|exception|fatal|panic|warn)\b/i
+  const shown = lines.filter((l) => (!q || l.toLowerCase().includes(q)) && (!errorsOnly || errorRe.test(l)))
+
   return (
     <div className="logs">
       <div className="row">
         <span className="muted">
-          {lines.length} lines · {conn === 'open' ? 'streaming' : conn}
+          {shown.length === lines.length ? `${lines.length} lines` : `${shown.length} of ${lines.length} lines`} · {conn === 'open' ? 'streaming' : conn}
         </span>
+        <input className="log-filter" type="search" value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter" aria-label="Filter log lines" spellCheck={false} />
+        <label className="check inline">
+          <input type="checkbox" checked={errorsOnly} onChange={(e) => setErrorsOnly(e.target.checked)} /> errors only
+        </label>
         <span className="spacer" />
         {!follow && <button onClick={() => setFollow(true)}>Follow</button>}
         <button onClick={() => setLines([])}>Clear</button>
       </div>
       <pre ref={pre} onScroll={onScroll} className="log">
-        {lines.join('\n')}
+        {shown.join('\n')}
       </pre>
+      {shown.length === 0 && lines.length > 0 && <p className="muted small">No line matches.</p>}
     </div>
   )
 }

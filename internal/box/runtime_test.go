@@ -75,6 +75,8 @@ func TestStartWithoutDevCommand(t *testing.T) {
 
 func TestCrashLoopMarksBoxStopped(t *testing.T) {
 	m := newTestManager(t)
+	evs, cancel := m.Bus().Subscribe()
+	defer cancel()
 	b, err := m.New(ctx, NewOptions{RepoPath: newPlainRepo(t, "version: 1\ndev: exit 1\n"), Name: "a"})
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +85,22 @@ func TestCrashLoopMarksBoxStopped(t *testing.T) {
 		info, _ := m.Info(b.RepoID, "a")
 		return info.State == state.Stopped && strings.Contains(info.LastError, "crashed")
 	})
+	// The stop is published as a crash, which is what notifications key on;
+	// a user's `agentbox stop` carries no reason.
+	deadline := time.After(2 * time.Second)
+	for {
+		select {
+		case e := <-evs:
+			if d, _ := e.Data.(map[string]any); e.Type == "box.state" && e.Box == b.ID() && d["state"] == "stopped" {
+				if d["reason"] != "crashed" {
+					t.Fatalf("crash stop published without reason: %+v", d)
+				}
+				return
+			}
+		case <-deadline:
+			t.Fatal("no stopped event seen")
+		}
+	}
 }
 
 func TestInfoReportsGitAndEnv(t *testing.T) {

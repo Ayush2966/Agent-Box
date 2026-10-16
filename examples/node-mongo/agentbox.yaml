@@ -1,0 +1,10 @@
+version: 1
+setup: npm install
+dev: node server.js
+ports: [APP_PORT]
+db:
+  driver: mongo
+  url_env: MONGO_URL
+  source: mongodb://127.0.0.1:27017/myapp
+env:
+  template: .env.example
