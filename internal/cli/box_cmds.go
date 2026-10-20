@@ -57,7 +57,7 @@ func (a *app) newCmd() *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&opts.From, "from", "", "branch or commit to start from (default: current HEAD)")
+	f.StringVar(&opts.From, "from", "", "branch, tag or commit to start from; a remote-only branch works by its plain name (default: current HEAD)")
 	f.BoolVar(&opts.NoDev, "no-dev", false, "don't start the dev server")
 	f.BoolVar(&opts.KeepFailed, "keep-failed", false, "keep a box that failed to create, for debugging")
 	f.BoolVar(&opts.Terminate, "terminate", false, "terminate stray connections to the Postgres template")
